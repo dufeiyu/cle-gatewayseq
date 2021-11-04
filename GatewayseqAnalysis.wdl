@@ -1,4 +1,4 @@
-workflow MyeloseqHDAnalysis {
+workflow GatewayseqAnalysis {
 
     String Cram
     String CramIndex

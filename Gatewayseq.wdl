@@ -1,6 +1,6 @@
-import "MyeloseqHDAnalysis.wdl" as subWF
+import "GatewayseqAnalysis.wdl" as subWF
 
-workflow MyeloseqHD {
+workflow Gatewayseq {
 
     File SampleSheet
     # sample sheet has this structure:
@@ -23,17 +23,17 @@ workflow MyeloseqHD {
     String ReferenceDict = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.dict"
     
     String VEP          = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/VEP_cache"
-    String QcMetrics    = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/new_myeloseq/git/cle-myeloseq/accessory_files/MyeloseqHDQCMetrics.txt"
-    String Description  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/new_myeloseq/git/cle-myeloseq/accessory_files/MyeloseqDescription.txt"
+    String QcMetrics    = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeqMetrics.txt"
+    String Description  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeqDescription.txt" 
     
-    String HaplotectBed = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/new_myeloseq/liftOver/output/myeloseq.haplotect_snppairs_hg38.041718.bed"
-    String AmpliconBed  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/new_myeloseq/git/cle-myeloseq/accessory_files/hg38/MyeloseqHD.16462-1615924889.Amplicons.hg38.110221.bed"
-    String CoverageBed  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/new_myeloseq/git/cle-myeloseq/accessory_files/hg38/MyeloseqHD.16462-1615924889.CoverageQC.hg38.110221.bed"
+    String HaplotectBed = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq.haplotect_snppairs_hg38.041718.bed"
+    String AmpliconBed  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeq66650-1622560509.Amplicons.hg38.110321.bed"
+    String CoverageBed  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeq66650-1622560509.CoverageQC.hg38.110321.bed"
 
-    String CustomAnnotationVcf   = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/new_myeloseq/liftOver/output/myeloseq_custom_annotations.annotated.011618.hg38.vcf.gz"
-    String CustomAnnotationIndex = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/new_myeloseq/liftOver/output/myeloseq_custom_annotations.annotated.011618.hg38.vcf.gz.tbi"
+    String CustomAnnotationVcf   = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq_custom_annotations.annotated.011618.hg38.vcf.gz"
+    String CustomAnnotationIndex = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq_custom_annotations.annotated.011618.hg38.vcf.gz.tbi"
 
-    String QC_pl = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/new_myeloseq/git/cle-myeloseq/QC_metrics.pl"
+    String QC_pl = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/QC_metrics.pl"
 
     String CustomAnnotationParameters = "MYELOSEQ,vcf,exact,0,TCGA_AC,MDS_AC,MYELOSEQBLACKLIST"
     
@@ -91,7 +91,7 @@ workflow MyeloseqHD {
                    jobGroup=JobGroup
 	}
 
-        call subWF.MyeloseqHDAnalysis {
+        call subWF.GatewayseqAnalysis {
             input: Cram=convert_bam.cram,
                    CramIndex=convert_bam.crai,
                    CoverageBed=CoverageBed,
