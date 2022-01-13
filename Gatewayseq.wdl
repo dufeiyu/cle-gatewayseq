@@ -28,7 +28,7 @@ workflow Gatewayseq {
     String HaplotectBed = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq.haplotect_snppairs_hg38.041718.bed"
     String AmpliconBed  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeq66650-1622560509.Amplicons.hg38.110321.bed"
     String CoverageBed  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeq66650-1622560509.CoverageQC.hg38.110321.bed"
-    String DragenCoverageBed = "/staging/runs/Haloplex/dragen_align_inputs/MyeloseqHD.16462-1615924889.CoverageQC.hg38.110221.bed"
+    String DragenCoverageBed = "/staging/runs/Haloplex/dragen_align_inputs/GatewaySeq66650-1622560509.CoverageQC.hg38.110321.bed"
 
     String CustomAnnotationVcf   = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq_custom_annotations.annotated.011618.hg38.vcf.gz"
     String CustomAnnotationIndex = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq_custom_annotations.annotated.011618.hg38.vcf.gz.tbi"
