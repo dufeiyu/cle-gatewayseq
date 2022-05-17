@@ -26,13 +26,8 @@ workflow Gatewayseq {
     String Description  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeqDescription.txt" 
 
     String HaplotectBed = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq.haplotect_snppairs_hg38.041718.bed"
-    String AmpliconBed  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeq66650-1622560509.Amplicons.hg38.110321.bed"
     String CoverageBed  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeq66650-1622560509.CoverageQC.hg38.110321.bed"
     String DragenCoverageBed = "/staging/runs/Haloplex/dragen_align_inputs/GatewaySeq66650-1622560509.CoverageQC.hg38.110321.bed"
-
-    String CustomAnnotationVcf   = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq_custom_annotations.annotated.011618.hg38.vcf.gz"
-    String CustomAnnotationIndex = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq_custom_annotations.annotated.011618.hg38.vcf.gz.tbi"
-    String CustomAnnotationParameters = "MYELOSEQ,vcf,exact,0,TCGA_AC,MDS_AC,MYELOSEQBLACKLIST"
 
     String QC_pl = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/QC_metrics.pl"
     String DemuxFastqDir = "/scratch1/fs1/gtac-mgi/CLE/gatewayseq/demux_fastq"
@@ -79,7 +74,6 @@ workflow Gatewayseq {
                    RG=samples[3] + '.' + samples[4] + '.' + samples[0],
                    SM=samples[6],
                    LB=samples[5] + '.' + samples[0],
-                   AmpliconBed=AmpliconBed,
                    CoverageBed=DragenCoverageBed,
                    OutputDir=OutputDir,
                    SubDir=samples[1] + '_' + samples[0],
@@ -87,31 +81,18 @@ workflow Gatewayseq {
                    jobGroup=JobGroup
         }
 
-        call convert_bam {
-            input: Bam=dragen_align.bam,
-                   BamIndex=dragen_align.bai,
-                   AmpliconBed=AmpliconBed,
-                   refFasta=Reference,
-                   Name=samples[1],
-                   OutputDir=OutputDir,
-                   SubDir=samples[1] + '_' + samples[0],
-                   queue=Queue,
-                   jobGroup=JobGroup
-        }
-
         call subWF.GatewayseqAnalysis {
-            input: Cram=convert_bam.cram,
-                   CramIndex=convert_bam.crai,
+            input: Cram=dragen_align.cram,
+                   CramIndex=dragen_align.crai,
+                   DragenVcf=dragen_align.vcf,
+                   DragenVcfIndex=dragen_align.index,
                    CoverageBed=CoverageBed,
                    refFasta=Reference,
                    ReferenceDict=ReferenceDict,
                    Name=samples[1],
                    Vepcache=VEP,
-                   CustomAnnotationVcf=CustomAnnotationVcf,
-                   CustomAnnotationIndex=CustomAnnotationIndex,
-                   CustomAnnotationParameters=CustomAnnotationParameters,
-                   HaplotectBed=HaplotectBed,
-                   QcMetrics=QcMetrics,
+#                   HaplotectBed=HaplotectBed,
+#                   QcMetrics=QcMetrics,
                    Description=Description,
                    OutputDir=OutputDir,
                    SubDir=samples[1] + '_' + samples[0],
@@ -173,7 +154,7 @@ task dragen_demux {
      >>>
 
      runtime {
-         docker_image: "seqfu/centos7-dragen-3.9.3:latest"
+         docker_image: "seqfu/centos7-dragen-3.10.4:latest"
          cpu: "20"
          memory: "200 G"
          queue: queue
@@ -262,17 +243,17 @@ task dragen_align {
      String RG
      String SM
      String LB
-     String AmpliconBed
      String CoverageBed
-     Int? TrimLen
      String OutputDir
      String SubDir
      String jobGroup
      String queue
 
-     String batch = basename(OutputDir)
+     Int? TrimLen
+     Int readfamilysize
 
-     String StagingDir = "/staging/runs/Haloplex/"
+     String batch = basename(OutputDir)
+     String StagingDir = "/staging/runs/MyeloSeqHD/"
      String LocalAlignDir = StagingDir + "align/" + batch
      String LocalSampleDir = LocalAlignDir + "/" + SubDir
      String log = StagingDir + "log/" + Name + "_align.log"
@@ -287,13 +268,13 @@ task dragen_align {
 
          /bin/mkdir ${LocalSampleDir} && \
          /bin/mkdir ${outdir} && \
-         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} --enable-map-align true --enable-sort true --enable-map-align-output true --vc-enable-umi-liquid true --gc-metrics-enable=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads 1 --enable-variant-caller=true --vc-target-bed ${CoverageBed} --umi-metrics-interval-file ${CoverageBed} --read-trimmers=fixed-len --trim-r1-5prime=${default=1 TrimLen} --trim-r1-3prime=${default=1 TrimLen} --trim-r2-5prime=${default=1 TrimLen} --trim-r2-3prime=${default=1 TrimLen} --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format BAM &> ${log} && \
+         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} --enable-map-align true --enable-sort true --enable-map-align-output true --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 --vc-enable-orientation-bias-filter true --gc-metrics-enable=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --enable-variant-caller=true --vc-target-bed ${CoverageBed} --umi-metrics-interval-file ${CoverageBed} --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format CRAM &> ${log} && \
          /bin/mv ${log} ./ && \
          /bin/mv ${LocalSampleDir} ${dragen_outdir}
      }
 
      runtime {
-         docker_image: "seqfu/centos7-dragen-3.9.3:latest"
+         docker_image: "seqfu/centos7-dragen-3.10.4:latest"
          cpu: "20"
          memory: "200 G"
          queue: queue
@@ -302,50 +283,13 @@ task dragen_align {
      }
 
      output {
-         File bam = "${dragen_outdir}/${Name}_tumor.bam"
-         File bai = "${dragen_outdir}/${Name}_tumor.bam.bai"
+         File cram = "${dragen_outdir}/${Name}_tumor.cram"
+         File crai = "${dragen_outdir}/${Name}_tumor.cram.bai"
+         File vcf = "${dragen_outdir}/${Name}.hard-filtered.vcf.gz"
+         File index = "${dragen_outdir}/${Name}.hard-filtered.vcf.gz.tbi"
      }
 }
 
-task convert_bam {
-     String Bam
-     String BamIndex
-     String Name
-     String refFasta
-     String AmpliconBed
-     String OutputDir
-     String SubDir
-     String jobGroup
-     String queue
-
-     String outdir = OutputDir + "/" + SubDir
-
-     command <<<
-         /usr/local/bin/tagbam -v ${Bam} ${AmpliconBed} /tmp/tagged.bam > ${Name}.ampinfo.txt && \
-         /usr/local/bin/samtools view -T ${refFasta} -C -o "${Name}.cram" /tmp/tagged.bam && \
-         /usr/local/bin/samtools index "${Name}.cram" &&
-         (cut -f 5 ${Name}.ampinfo.txt && cut -f 4 ${AmpliconBed}) | sort | uniq -c | awk '!/\./ { print $2,$1-1; }' > ${Name}.ampcounts.txt && \
-         /bin/cp ${Name}.ampinfo.txt ${outdir} && \
-         /bin/cp ${Name}.ampcounts.txt ${outdir} && \
-         /bin/cp ${Name}.cram ${outdir} && \
-         /bin/cp ${Name}.cram.crai ${outdir}
-     >>>
-
-     runtime {
-         docker_image: "registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v1"
-         cpu: "1"
-         memory: "24 G"
-         queue: queue
-         job_group: jobGroup 
-     }
-
-     output {
-         File cram  = "${Name}.cram"
-         File crai = "${Name}.cram.crai"
-         File info = "${Name}.ampinfo.txt"
-         File counts = "${Name}.ampcounts.txt"
-     }
-}
 
 task move_demux_fastq {
      Array[String] order_by
