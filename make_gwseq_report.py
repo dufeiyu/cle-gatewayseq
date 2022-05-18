@@ -82,7 +82,7 @@ parser.add_argument('-b','--DOB',default='NONE',help='Date of birth')
 parser.add_argument('-e','--exception',default='NONE',help='Exception')
 parser.add_argument('-f','--minvaf',default=2.0,help='Minimum VAF for discovery analysis')
 parser.add_argument('-i','--runinfostr',default='NONE',help='Illumina Run Information String')
-parser.add_argument('-p','--maxaf',default=0.001,help='Maximum population allele frequency for potential somatic variants')
+parser.add_argument('-p','--maxaf',default=0.02,help='Maximum population allele frequency for potential somatic variants')
 
 args = parser.parse_args()
 

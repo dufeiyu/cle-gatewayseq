@@ -1,37 +1,38 @@
-import "GatewayseqAnalysis.wdl" as subWF
+version 1.0
 
 workflow Gatewayseq {
 
-    File SampleSheet
-    # sample sheet has this structure:
-    # index  name  RG_ID  RG_FLOWCELL  RG_LANE  RG_LIB  RG_SAMPLE [R1] [R2]
+ input {
+ 
+      File SampleSheet
+      # sample sheet has this structure:
+      # index  name  RG_ID  RG_FLOWCELL  RG_LANE  RG_LIB  RG_SAMPLE [R1] [R2]
     
-    File? DemuxSampleSheet
+      File? DemuxSampleSheet
 
-    Array[String] Adapters = ["GATCGGAAGAGCACACGTCTGAACTCCAGTCAC","AGATCGGAAGAGCGTCGTGTAGGGAAA"]
+      String? IlluminaDir
 
-    String? IlluminaDir
-    String JobGroup
-    String OutputDir
+      String JobGroup
+      String OutputDir
 
-    String Queue
-    String DragenQueue = "duncavagee"
+      String Queue
+      String DragenQueue = "duncavagee"
 
-    String DragenReference = "/staging/runs/Chromoseq/refdata/dragen_hg38"
-    String Reference    = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.fa"
-    String ReferenceDict = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.dict"
+      String DragenReference = "/staging/runs/Chromoseq/refdata/dragen_hg38"
+      String Reference    = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.fa"
+      String ReferenceDict = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.dict"
 
-    String VEP          = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/VEP_cache"
-    String QcMetrics    = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeqMetrics.txt"
-    String Description  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeqDescription.txt" 
+      String VEP          = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/VEP_cache"
+      String QcMetrics    = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeqQC.json"
 
-    String HaplotectBed = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq.haplotect_snppairs_hg38.041718.bed"
-    String CoverageBed  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeq66650-1622560509.CoverageQC.hg38.110321.bed"
-    String DragenCoverageBed = "/staging/runs/Haloplex/dragen_align_inputs/GatewaySeq66650-1622560509.CoverageQC.hg38.110321.bed"
+      String HaplotectBed = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq.haplotect_snppairs_hg38.041718.bed"
+      String CoverageBed
 
-    String QC_pl = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/QC_metrics.pl"
-    String DemuxFastqDir = "/scratch1/fs1/gtac-mgi/CLE/gatewayseq/demux_fastq"
+      String QC_pl = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/QC_metrics.pl"
+      String DemuxFastqDir = "/scratch1/fs1/gtac-mgi/CLE/gatewayseq/demux_fastq"
 
+    }
+    
     if (defined(DemuxSampleSheet)){
       call dragen_demux {
         input: Dir=IlluminaDir,
@@ -50,76 +51,95 @@ workflow Gatewayseq {
       }
     }
 
+    call remove_rundir {
+         input: order_by=prepare_samples.sample_sheet,
+         rundir=IlluminaDir,
+         queue=DragenQueue,
+         jobGroup=JobGroup
+        }
+    }
+
     Array[Array[String]] inputData = read_tsv(select_first([prepare_samples.sample_sheet,SampleSheet]))
 
     # the inputdata should be: index  name  RG_ID  RG_FLOWCELL  RG_LANE  RG_LIB  RG_SAMPLE read1path read2path
     scatter (samples in inputData){
-
-        if(!defined(DemuxSampleSheet)){
-          call trim_reads {
-              input: Read1=samples[7],
-              Read2=samples[8],
-              Adapters=Adapters,
-              Name=samples[1],
-              queue=Queue,
-              jobGroup=JobGroup
-          }
+		
+       	call dragen_align {
+    	     input: DragenRef=DragenReference,
+             	    fastq1=samples[7],
+                    fastq2=samples[8],
+                    Name=samples[1],
+                    RG=samples[3] + '.' + samples[4] + '.' + samples[0],
+                    SM=samples[6],
+                    LB=samples[5] + '.' + samples[0],
+                    CoverageBed=CoverageBed,
+                    OutputDir=OutputDir,
+                    SubDir=samples[1] + '_' + samples[0],
+                    queue=DragenQueue,
+                    jobGroup=JobGroup
         }
 
-        call dragen_align {
-            input: DragenRef=DragenReference,
-                   fastq1=select_first([trim_reads.read1,samples[7]]),
-                   fastq2=select_first([trim_reads.read2,samples[8]]),
-                   Name=samples[1],
-                   RG=samples[3] + '.' + samples[4] + '.' + samples[0],
-                   SM=samples[6],
-                   LB=samples[5] + '.' + samples[0],
-                   CoverageBed=DragenCoverageBed,
+	call run_vep {
+             input: Vcf=dragen_align.vcf,
+	       VcfIndex=dragen_align.index,
+               refFasta=refFasta,
+               Vepcache=VEP,
+               Name=Name,
+               queue=Queue,
+               jobGroup=JobGroup
+        }
+
+        call run_haplotect {
+             input: refFasta=refFasta,
+               refDict=ReferenceDict,
+               Cram=dragen_align.cram,
+               CramIndex=dragen_align.crai,
+               Bed=HaplotectBed,
+               Name=Name,
+               queue=Queue,
+               jobGroup=JobGroup
+         }
+
+         call gather_files {
+            input: OutputFiles=[run_haplotect.out_file,
+                   run_haplotect.sites_file,
+                   run_vep.vcf],
                    OutputDir=OutputDir,
-                   SubDir=samples[1] + '_' + samples[0],
-                   queue=DragenQueue,
+                   SubDir=SubDir,
+                   queue=Queue,
                    jobGroup=JobGroup
-        }
+          }
 
-        call subWF.GatewayseqAnalysis {
-            input: Cram=dragen_align.cram,
-                   CramIndex=dragen_align.crai,
-                   DragenVcf=dragen_align.vcf,
-                   DragenVcfIndex=dragen_align.index,
-                   CoverageBed=CoverageBed,
-                   refFasta=Reference,
-                   ReferenceDict=ReferenceDict,
-                   Name=samples[1],
-                   Vepcache=VEP,
-#                   HaplotectBed=HaplotectBed,
-#                   QcMetrics=QcMetrics,
-                   Description=Description,
-                   OutputDir=OutputDir,
-                   SubDir=samples[1] + '_' + samples[0],
-                   Queue=Queue,
-                   JobGroup=JobGroup
-        }
-    } 
+#          call make_report {
+#             input: order_by=gather_files.done,
+#               Name=Name,
+#               mrn=mrn,
+#               accession=accession,
+#               DOB=DOB,
+#               sex=sex,
+#               exception=exception,
+#               RunInfoString=RunInfoString,
+#                CoverageBed=CoverageBed,
+#               QcMetrics=QcMetrics,
+#                OutputDir=OutputDir,
+#                SubDir=SubDir,
+#                queue=Queue,
+#                jobGroup=JobGroup
+#         }
+
+    }
     
     if (defined(DemuxSampleSheet)){
         call move_demux_fastq {
-            input: order_by=GatewayseqAnalysis.all_done,
+            input: order_by=select_first(gather_files.done),
             Batch=basename(OutputDir),
             DemuxFastqDir=DemuxFastqDir,
             queue=DragenQueue,
             jobGroup=JobGroup
-        }
-
-        call remove_rundir {
-            input: order_by=GatewayseqAnalysis.all_done,
-            rundir=IlluminaDir,
-            queue=DragenQueue,
-            jobGroup=JobGroup
-        }
     }
 
     call batch_qc {
-        input: order_by=GatewayseqAnalysis.all_done,
+        input: order_by=select_first(gather_files.done),
                BatchDir=OutputDir,
                QC_pl=QC_pl,
                queue=Queue,
@@ -129,6 +149,8 @@ workflow Gatewayseq {
 
 
 task dragen_demux {
+
+ inputs {
      String Dir
      String OutputDir
      String SampleSheet
@@ -142,8 +164,9 @@ task dragen_demux {
      String LocalSampleSheet = StagingDir + "sample_sheet/" + batch + '.csv'
      String log = StagingDir + "log/" + batch + "_demux.log"
      String DemuxReportDir = OutputDir + "/dragen_demux_reports"
-
-     command <<<
+ }
+ 
+ command <<<
          /bin/cp ${SampleSheet} ${LocalSampleSheet} && \
          /opt/edico/bin/dragen --bcl-conversion-only true --bcl-only-matched-reads true --strict-mode true --sample-sheet ${LocalSampleSheet} --bcl-input-directory ${Dir} --output-directory ${LocalFastqDir} &> ${log} && \
          /bin/ls ${LocalFastqDir}/*_R1_001.fastq.gz > Read1_list.txt && \
@@ -151,7 +174,7 @@ task dragen_demux {
          /bin/mv ${log} ./ && \
          /bin/rm -f ${LocalSampleSheet} && \
          /bin/cp -r ${LocalReportDir} ${DemuxReportDir}
-     >>>
+ >>>
 
      runtime {
          docker_image: "seqfu/centos7-dragen-3.10.4:latest"
@@ -168,13 +191,17 @@ task dragen_demux {
 }
 
 task prepare_samples {
+
+ input {
+
      File SampleSheet
      String Fastq1
      String Fastq2
      String jobGroup
      String queue
-
-     command <<<
+  }
+  
+  command <<<
              /bin/cp ${Fastq1} 1.tmp.txt
              /bin/cp ${Fastq2} 2.tmp.txt
              /usr/bin/perl -e 'open(R1,"1.tmp.txt"); @r1 = <R1>; \
@@ -191,51 +218,26 @@ task prepare_samples {
                      print join("\t",@l,$r1,$r2),"\n";
                  }
                  close SS;' > sample_sheet.txt
-     >>>
-     runtime {
+  >>>
+  
+  runtime {
          docker_image: "registry.gsc.wustl.edu/genome/lims-compute-xenial:1"
          cpu: "1"
          memory: "4 G"
          queue: queue
          job_group: jobGroup
-     }
-     output {
+  }
+  
+  output {
          File sample_sheet = "sample_sheet.txt"
-     }
-}
-
-task trim_reads {
-     String Read1
-     String Read2
-     Array[String] Adapters
-     String Name
-     String jobGroup
-     String queue
-
-     command {
-         if [[ $Read1 =~ _R1_001 ]]; then
-             /bin/cp ${Read1} ${Name}.1.fastq.gz && \
-             /bin/cp ${Read2} ${Name}.2.fastq.gz
-         else
-             export PYTHONPATH=/opt/cutadapt/lib/python2.7/site-packages/ && \
-             /opt/cutadapt/bin/cutadapt -a ${Adapters[0]} -A ${Adapters[1]} -o ${Name}.1.fastq.gz -p ${Name}.2.fastq.gz ${Read1} ${Read2}
-         fi
-     }
-
-     runtime {
-         docker_image: "registry.gsc.wustl.edu/fdu/cutadapt:1"
-         cpu: "1"
-         memory: "8 G"
-         queue: queue
-         job_group: jobGroup
-     }
-     output {
-         File read1 = "${Name}.1.fastq.gz"
-         File read2 = "${Name}.2.fastq.gz"
-     }
+  }
+  
 }
 
 task dragen_align {
+
+ input {
+ 
      String Name
      String DragenRef
      String fastq1
@@ -253,24 +255,29 @@ task dragen_align {
      Int readfamilysize
 
      String batch = basename(OutputDir)
-     String StagingDir = "/staging/runs/MyeloSeqHD/"
+     String StagingDir = "/staging/runs/GatewaySeq/"
      String LocalAlignDir = StagingDir + "align/" + batch
+     String LocalBedFile = "/staging/tmp/coverage.bed"
      String LocalSampleDir = LocalAlignDir + "/" + SubDir
      String log = StagingDir + "log/" + Name + "_align.log"
 
      String outdir = OutputDir + "/" + SubDir
      String dragen_outdir = outdir + "/dragen"
 
-     command {
+ }
+ 
+ command {
          if [ ! -d "${LocalAlignDir}" ]; then
              /bin/mkdir ${LocalAlignDir}
          fi
 
          /bin/mkdir ${LocalSampleDir} && \
          /bin/mkdir ${outdir} && \
-         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} --enable-map-align true --enable-sort true --enable-map-align-output true --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 --vc-enable-orientation-bias-filter true --gc-metrics-enable=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --enable-variant-caller=true --vc-target-bed ${CoverageBed} --umi-metrics-interval-file ${CoverageBed} --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format CRAM &> ${log} && \
+	 /bin/cp ${CoverageBed} ${LocalBedFile} && \
+         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} --enable-map-align true --enable-sort true --enable-map-align-output true --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 --vc-enable-orientation-bias-filter true --gc-metrics-enable=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --enable-variant-caller=true --vc-target-bed ${LocalBedFile} --umi-metrics-interval-file ${LocalBedFile} --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format CRAM &> ${log} && \
          /bin/mv ${log} ./ && \
-         /bin/mv ${LocalSampleDir} ${dragen_outdir}
+         /bin/mv ${LocalSampleDir} ${dragen_outdir} && \
+	 /bin/rm -f ${LocalBedFile}
      }
 
      runtime {
@@ -292,6 +299,8 @@ task dragen_align {
 
 
 task move_demux_fastq {
+
+input {
      Array[String] order_by
      String Batch
      String DemuxFastqDir
@@ -299,60 +308,192 @@ task move_demux_fastq {
      String jobGroup
 
      String LocalDemuxFastqDir = "/staging/runs/Haloplex/demux_fastq/" + Batch
-
-     command {
+ }
+ command {
          if [ -d "${LocalDemuxFastqDir}" ]; then
              /bin/mv ${LocalDemuxFastqDir} ${DemuxFastqDir}
          fi
-     }
-     runtime {
+ }
+ runtime {
          docker_image: "ubuntu:xenial"
          queue: queue
          job_group: jobGroup
-     }
-     output {
+ }
+ output {
          String done = stdout()
-     }
+ }
 }
 
 task batch_qc {
+ input {
      Array[String] order_by
      String BatchDir
      String QC_pl
      String queue
      String jobGroup
-
-     command {
-         /usr/bin/perl ${QC_pl} ${BatchDir}
-     }
-     runtime {
+ }
+ 
+ command {
+     /usr/bin/perl ${QC_pl} ${BatchDir}
+ }
+ 
+ runtime {
          docker_image: "registry.gsc.wustl.edu/apipe-builder/genome_perl_environment:compute1-20"
          memory: "4 G"
          queue: queue
          job_group: jobGroup
-     }
-     output {
+ }
+ 
+ output {
          String done = stdout()
-     }
+ }
 }
 
 task remove_rundir {
+ input {
      Array[String] order_by
      String rundir
      String queue
      String jobGroup
-
-     command {
+ }
+ command {
          if [ -d "${rundir}" ]; then
              /bin/rm -Rf ${rundir}
          fi
-     }
-     runtime {
+ }
+ runtime {
          docker_image: "ubuntu:xenial"
          queue: queue
          job_group: jobGroup
-     }
-     output {
+ }
+ output {
          String done = stdout()
-     }
+ }
+}
+
+task run_vep {
+ input {
+     File Vcf
+     File VcfIndex
+     String refFasta
+     String Vepcache
+     Float? maxAF
+     String Name
+     String jobGroup
+     String queue
+ }
+ command {
+             /usr/bin/perl -I /opt/lib/perl/VEP/Plugins /usr/bin/variant_effect_predictor.pl --format vcf \
+             --vcf --plugin Downstream --fasta ${refFasta} --hgvs --symbol --term SO --flag_pick \
+             -i ${Vcf} --offline --cache --max_af --dir ${Vepcache} -o ${Name}.annotated.vcf && \
+             /opt/htslib/bin/bgzip ${Name}.annotated.vcf && /usr/bin/tabix -p vcf ${Name}.annotated.vcf.gz
+ }
+ runtime {
+         docker_image: "registry.gsc.wustl.edu/mgi-cle/vep105-htslib1.9:1"
+         cpu: "1"
+         memory: "10 G"
+         queue: queue
+         job_group: jobGroup
+ }
+ output {
+         File vcf = "${Name}.annotated.vcf.gz"
+ }
+}
+
+task run_haplotect {
+ input {
+     String Cram
+     String CramIndex
+     String Bed
+     String Name
+     String refDict
+     String refFasta
+     String queue
+     String jobGroup
+
+     Int? MinReads
+ }
+ command <<<
+         /usr/bin/awk -v OFS="\t" '{ $2=$2-1; print; }' ${Bed} > /tmp/pos.bed && \
+         /usr/local/openjdk-8/bin/java -Xmx6g \
+         -jar /opt/hall-lab/gatk-package-4.1.8.1-18-ge2f02f1-SNAPSHOT-local.jar Haplotect \
+         -I ${Cram} -R ${refFasta} --sequence-dictionary ${refDict} \
+         -mmq 20 -mbq 20 -max-depth-per-sample 10000 -gstol 0.001 -mr ${default=10 MinReads} \
+        -htp ${Bed} -L /tmp/pos.bed -outPrefix ${Name}
+ >>>
+
+ runtime {
+         docker_image: "registry.gsc.wustl.edu/mgi-cle/haplotect:0.3"
+         cpu: "1"
+         memory: "8 G"
+         queue: queue
+         job_group: jobGroup
+ }
+ output {
+         File out_file = "${Name}.haplotect.txt"
+         File sites_file = "${Name}.haplotectloci.txt"
+ }
+}
+
+task make_report {
+ input {
+     String order_by
+     String Name
+     String mrn
+     String accession
+     String DOB
+     String sex
+     String exception
+     String RunInfoString
+     String CoverageBed
+     String QcMetrics
+     String OutputDir
+     String SubDir
+     String jobGroup
+     String queue
+ 
+     Int? MinReadsPerFamily
+
+     String SampleOutDir = OutputDir + "/" + SubDir
+  }
+  
+  command {
+         /usr/bin/python3 /usr/local/bin/make_hd_report.py -n ${Name} -d ${SampleOutDir} -c ${CoverageBed} -q ${QcMetrics} \
+         -m ${mrn} -a ${accession} -b ${DOB} -e ${exception} -i ${RunInfoString} && \
+         /bin/mv ./*.report.txt ./*.report.json ${SampleOutDir}
+  }
+  runtime {
+         docker_image: "registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v1"
+         cpu: "1"
+         memory: "16 G"
+         queue: queue
+         job_group: jobGroup
+  }
+  output {
+         String done = stdout()
+  }
+}
+
+task gather_files {
+ input {
+     Array[String] OutputFiles
+     String OutputDir
+     String? SubDir
+     String jobGroup
+     String queue
+ }
+ command {
+         if [[ ${SubDir} != "" ]] && [[ ! -e ${OutputDir}/${SubDir} ]]; then
+             mkdir ${OutputDir}/${SubDir}
+         fi
+         /bin/mv -f -t ${OutputDir}/${SubDir} ${sep=" " OutputFiles}
+ }
+ runtime {
+         docker_image: "registry.gsc.wustl.edu/genome/lims-compute-xenial:1"
+         queue: queue
+         job_group: jobGroup
+ }
+ output {
+         String done = stdout()
+ }
 }

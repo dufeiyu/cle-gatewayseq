@@ -24,23 +24,14 @@ use File::Compare;
 
 ##THIS LAUNCHER SCRIPT NEEDS TO BE RUN ON DRAGEN NODE compute1-dragen-2 TO BE ABLE TO COPY RUNDIR
 ##TO LOCAL STAGING DRIVE
-die "Provide rundir, excel sample spreadsheet, and batch name in order" unless @ARGV == 3;
+die "Provide rundir, excel sample spreadsheet, batch name, and bed file in order" unless @ARGV == 4;
 
-my ($rundir, $sample_sheet, $batch_name) = @ARGV;
+my ($rundir, $sample_sheet, $batch_name, $bedfile) = @ARGV;
 die "$sample_sheet is not valid" unless -s $sample_sheet;
 
-my $staging_dir = '/staging/runs/MyeloSeqHD';
+my $staging_dir = '/staging/runs/GatewaySeq';
 my $staging_rundir = $staging_dir.'/rundir';
-my $dir = '/storage1/fs1/duncavagee/Active/SEQ/MyeloSeqHD';
-
-#check diff on two key files
-for my $name (qw(MyeloseqHD.16462-1615924889.CoverageQC.hg38.bed myeloseq_hotspots.vcf.gz)) {
-    my $staging = File::Spec->join($staging_dir, 'dragen_align_inputs', $name);
-    my $process = File::Spec->join($dir, 'process', 'git', 'cle-myeloseqhd', 'accessory_files', $name);
-    unless (compare($staging, $process)==0) {
-        die "$staging and $process are not SAME !";
-    }
-}
+my $dir = '/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq';
 
 if ($rundir =~ /$staging_rundir/) {
     if (-d $rundir) {
@@ -54,12 +45,11 @@ else {
     die "globus-xfer $rundir to dragen-2 staging first";
 }
 
-my $git_dir = File::Spec->join($dir, 'process', 'git', 'cle-myeloseqhd');
+my $git_dir = File::Spec->join($dir, 'process', 'git', 'cle-gatewayseq');
 
 my $conf = File::Spec->join($git_dir, 'application.conf');
-my $wdl  = File::Spec->join($git_dir, 'MyeloseqHD.wdl');
-my $zip  = File::Spec->join($git_dir, 'imports.zip');
-my $json_template = File::Spec->join($git_dir, 'MyeloseqHD.json');
+my $wdl  = File::Spec->join($git_dir, 'GatewaySeq.wdl');
+my $json_template = File::Spec->join($git_dir, 'GatewaySeq.json');
 
 my $group  = '/cle/wdl/haloplex';
 my $queue  = 'pathology';
@@ -75,34 +65,34 @@ unless (-d $out_dir) {
 }
 
 #parsing CoPath dump for MRN, ACCESSION, DOB and Gender
-my $copath_dump = '/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/daily_accession/WML_Daily_Accession_Log_CLE.csv';
-my $dump_fh = IO::File->new($copath_dump) or die "fail to open $copath_dump for reading";
-my %hash;
+#my $copath_dump = '/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/daily_accession/WML_Daily_Accession_Log_CLE.csv';
+#my $dump_fh = IO::File->new($copath_dump) or die "fail to open $copath_dump for reading";
+#my %hash;
 
-while (my $l = $dump_fh->getline) {
-    next if $l =~ /^Accession/;
+#while (my $l = $dump_fh->getline) {
+#    next if $l =~ /^Accession/;
     
-    my @columns = split /,/, $l;
-    my $id  = $columns[2].'_'.$columns[0];
-    my $sex = $columns[4];
+#    my @columns = split /,/, $l;
+#    my $id  = $columns[2].'_'.$columns[0];
+#    my $sex = $columns[4];
 
-    if ($sex eq 'M') {
-        $sex = 'male';
-    }
-    elsif ($sex eq 'F') {
-        $sex = 'female';
-    }
-    else {
+#    if ($sex eq 'M') {
+#        $sex = 'male';
+#    }
+#    elsif ($sex eq 'F') {
+#        $sex = 'female';
+#    }
+#    else {
         #Gender U
-        warn "WARN: unknown gender $sex found for $id";
-    }
+#        warn "WARN: unknown gender $sex found for $id";
+#    }
 
-    $hash{$id} = {
-        DOB => $columns[5],
-        sex => $sex,
-    };
-}
-$dump_fh->close;
+ #   $hash{$id} = {
+ #       DOB => $columns[5],
+ #       sex => $sex,
+ #   };
+#}
+#$dump_fh->close;
 
 #parse sample spreadsheet
 my $data = Spreadsheet::Read->new($sample_sheet);
@@ -137,8 +127,10 @@ for my $row ($sheet->rows()) {
         die "FAIL to find matching $mrn and $accession from CoPath dump for library: $lib";
     }
 
-    my ($index) = $index =~ /([ATGC]{8})AT\-AAAAAAAAAA/;
-
+    $index =~ /([ATGC]{10})\-([ATGC]{10})/;
+    my $ind1 = $1;
+    my $ind2 = $2;
+    
     if ($exception) {
         if ($exception =~ /NOTRANSFER/) {
             push @case_excluded, $lib.'_'.$index;
@@ -155,7 +147,7 @@ for my $row ($sheet->rows()) {
         die "Unknown gender: $sex for library: $lib";
     }
     
-    $ds_str .= join ',', $lane, $lib, $lib, '', $index, '';
+    $ds_str .= join ',', $lane, $lib, $lib, '', $ind1, $ind2;
     $ds_str .= "\n";
     $si_str .= join "\t", $index, $lib, $seq_id, $flowcell, $lane, $lib, $name, $mrn, $accession, $hash{$id}->{DOB}, $sex, $exception;
     $si_str .= "\n";
@@ -225,17 +217,14 @@ my $run_info_str = join ',', $runid, $instr, $side, $fcmode, $wftype, $R1cycle, 
 
 ## Input JSON
 my $inputs = from_json(`cat $json_template`);
-$inputs->{'MyeloseqHD.OutputDir'}        = $out_dir;
-$inputs->{'MyeloseqHD.IlluminaDir'}      = $rundir;
-$inputs->{'MyeloseqHD.SampleSheet'}      = $si;
-$inputs->{'MyeloseqHD.DemuxSampleSheet'} = $dragen_ss;
-$inputs->{'MyeloseqHD.RunInfoString'}    = $run_info_str;
+$inputs->{'GatewaySeq.OutputDir'}        = $out_dir;
+$inputs->{'GatewaySeq.IlluminaDir'}      = $rundir;
+$inputs->{'GatewaySeq.SampleSheet'}      = $si;
+$inputs->{'GatewaySeq.DemuxSampleSheet'} = $dragen_ss;
+$inputs->{'GatewaySeq.CoverageBed'}    = $bedfile;
+$inputs->{'GatewaySeq.RunInfoString'}    = $run_info_str;
 
-if (@cases_excluded and $inputs->{'MyeloseqHD.DataTransfer'} eq 'true') {
-    $inputs->{'MyeloseqHD.CasesExcluded'} = join ',', @cases_excluded;
-}
-
-my $input_json = File::Spec->join($out_dir, 'MyeloseqHD.json');
+my $input_json = File::Spec->join($out_dir, 'GatewaySeq.json');
 my $json_fh = IO::File->new(">$input_json") or die "fail to write to $input_json";
 
 $json_fh->print(to_json($inputs, {canonical => 1, pretty => 1}));
@@ -244,7 +233,7 @@ $json_fh->close;
 my $out_log = File::Spec->join($out_dir, 'out.log');
 my $err_log = File::Spec->join($out_dir, 'err.log');
 
-my $cmd = "bsub -g $group -G $user_group -oo $out_log -eo $err_log -q $queue -a \"docker($docker)\" /usr/bin/java -Dconfig.file=$conf -jar /opt/cromwell.jar run -t wdl --imports $zip -i $input_json $wdl";
+my $cmd = "bsub -g $group -G $user_group -oo $out_log -eo $err_log -q $queue -a \"docker($docker)\" /usr/bin/java -Dconfig.file=$conf -jar /opt/cromwell.jar run -t wdl -i $input_json $wdl";
 
 system $cmd;
 #print $cmd."\n";
