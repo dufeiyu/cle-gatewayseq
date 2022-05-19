@@ -29,7 +29,7 @@ workflow Gatewayseq {
         String QC_pl = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/QC_metrics.pl"
         String DemuxFastqDir = "/scratch1/fs1/gtac-mgi/CLE/gatewayseq/demux_fastq"
 
-        Int readfamilysize = 3
+        Int readfamilysize = 1
     }
 
     if (defined(DemuxSampleSheet)){
