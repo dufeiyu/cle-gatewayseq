@@ -1,5 +1,4 @@
 {	
-    "Gatewayseq.JobGroup":"/cle/wdl/haloplex",
     "Gatewayseq.DemuxSampleSheet":"PATH",
     "Gatewayseq.SampleSheet":"PATH",
     "Gatewayseq.OutputDir":"PATH",
