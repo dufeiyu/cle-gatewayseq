@@ -230,89 +230,88 @@ qcdf = pd.concat([qcdf,dfpct])
 
 # get coverage info
 
-print("Collecting coverage metrics...",file=sys.stderr)
+#print("Collecting coverage metrics...",file=sys.stderr)
 
 # intersect full res coverage bedfile w/ coverage QC bed file to calculate coverage
-covQcBedPr = pr.PyRanges(pd.read_csv(caseinfo['covqcbedfile'], header=None, names="Chromosome Start End Exon Strand Gene len geneId transcriptId".split(), sep="\t"))
-fullResCovPr = pr.PyRanges(pd.read_csv(coveragemetrics, header=None, names="Chromosome Start End cov".split(), sep="\t"))
-df = covQcBedPr.join(fullResCovPr).df
-df['nt'] = df[['End','End_b']].min(axis=1) - df[['Start','Start_b']].max(axis=1)
-df['tcov'] = df['nt'] * df['cov']
+#covQcBedPr = pr.PyRanges(pd.read_csv(caseinfo['covqcbedfile'], header=None, names="Chromosome Start End Exon Strand Gene len geneId transcriptId".split(), sep="\t"))
+#fullResCovPr = pr.PyRanges(pd.read_csv(coveragemetrics, header=None, names="Chromosome Start End cov".split(), sep="\t"))
+#df = covQcBedPr.join(fullResCovPr).df
+#df['nt'] = df[['End','End_b']].min(axis=1) - df[['Start','Start_b']].max(axis=1)
+#df['tcov'] = df['nt'] * df['cov']
 
 # get hotspot qc
-hotspotdf = df[(df.Exon=='HOTSPOTQC')].copy()
-hotspotdf['Region'] = 'codon_' + hotspotdf['len']
-hotspotdf['Gene'] = hotspotdf['Strand']
-x = hotspotdf[['Gene','Region']].join(hotspotdf.groupby(['Gene','Region'])[['cov']].min(),on=['Gene','Region'])
-x['Mean'] = x['cov']
-x['covLevel1'] = x['cov'] > covLevel1
-x['covLevel1'] = x['covLevel1'].replace({True:1,False:0})
-x['covLevel2'] = x['cov'] > covLevel2
-x['covLevel2'] = x['covLevel2'].replace({True:1,False:0})
-x['Type'] = 'hotspot'
-x = x.drop_duplicates()
+#hotspotdf = df[(df.Exon=='HOTSPOTQC')].copy()
+#hotspotdf['Region'] = 'codon_' + hotspotdf['len']
+#hotspotdf['Gene'] = hotspotdf['Strand']
+#x = hotspotdf[['Gene','Region']].join(hotspotdf.groupby(['Gene','Region'])[['cov']].min(),on=['Gene','Region'])
+#x['Mean'] = x['cov']
+#x['covLevel1'] = x['cov'] > covLevel1
+#x['covLevel1'] = x['covLevel1'].replace({True:1,False:0})
+#x['covLevel2'] = x['cov'] > covLevel2
+#x['covLevel2'] = x['covLevel2'].replace({True:1,False:0})
+#x['Type'] = 'hotspot'
+#x = x.drop_duplicates()
 
-covqcdf = pd.concat([covqcdf,x[['Gene','Type','Region','Mean','covLevel1','covLevel2']]])
+#covqcdf = pd.concat([covqcdf,x[['Gene','Type','Region','Mean','covLevel1','covLevel2']]])
 
 # get Gene and exon qc
-df = df[df['Exon']!='HOTSPOTQC'].copy()
-df['len'] = df['len'].astype(int)
+#df = df[df['Exon']!='HOTSPOTQC'].copy()
+#df['len'] = df['len'].astype(int)
 
 # get list of transcripts
-assaygenelist = df[['Gene','geneId','transcriptId']].drop_duplicates()
+#assaygenelist = df[['Gene','geneId','transcriptId']].drop_duplicates()
 
 # exon qc
-exonqcdf = df.groupby(['Gene','Exon','len']).sum()[['tcov']].reset_index()
-exonqcdf['Mean'] = exonqcdf['tcov']/exonqcdf['len']
-x = df[(df['cov']>=covLevel1)].groupby(['Gene','Exon','len']).sum().reset_index()
-x['covLevel1']= x.nt/x.len*100
-exonqcdf = pd.merge(exonqcdf,x[['Gene','Exon','len','covLevel1']],on=['Gene','Exon','len'],how='left')
-x = df[(df['cov']>=covLevel2)].groupby(['Gene','Exon','len']).sum().reset_index()
-x['covLevel2']= x.nt/x.len*100
-exonqcdf = pd.merge(exonqcdf,x[['Gene','Exon','len','covLevel2']],on=['Gene','Exon','len'],how='left')
-exonqcdf['Type'] = 'Exon'
-exonqcdf['Region'] = exonqcdf['Exon']
-exonqcdf.fillna(0, inplace=True)
+#exonqcdf = df.groupby(['Gene','Exon','len']).sum()[['tcov']].reset_index()
+#exonqcdf['Mean'] = exonqcdf['tcov']/exonqcdf['len']
+#x = df[(df['cov']>=covLevel1)].groupby(['Gene','Exon','len']).sum().reset_index()
+#x['covLevel1']= x.nt/x.len*100
+#exonqcdf = pd.merge(exonqcdf,x[['Gene','Exon','len','covLevel1']],on=['Gene','Exon','len'],how='left')
+#x = df[(df['cov']>=covLevel2)].groupby(['Gene','Exon','len']).sum().reset_index()
+#x['covLevel2']= x.nt/x.len*100
+#exonqcdf = pd.merge(exonqcdf,x[['Gene','Exon','len','covLevel2']],on=['Gene','Exon','len'],how='left')
+#exonqcdf['Type'] = 'Exon'
+#exonqcdf['Region'] = exonqcdf['Exon']
+#exonqcdf.fillna(0, inplace=True)
 
-covqcdf = pd.concat([covqcdf,exonqcdf[['Gene','Type','Region','Mean','covLevel1','covLevel2']]])
+#covqcdf = pd.concat([covqcdf,exonqcdf[['Gene','Type','Region','Mean','covLevel1','covLevel2']]])
 
 # get Gene qc
 #
-geneqcdf = df[['Gene','Start','End','len']].drop_duplicates().groupby(['Gene']).sum()[['len']].reset_index()
-geneqcdf = pd.merge(geneqcdf,df.groupby(['Gene']).sum()[['tcov']].reset_index(),on=['Gene'],how='left')
-geneqcdf['Mean'] = geneqcdf['tcov']/geneqcdf['len']
-geneqcdf = pd.merge(geneqcdf,df[(df['cov']>=covLevel1)].groupby(['Gene']).sum().reset_index(),on=['Gene'],how='left',suffixes=['','_y'])
-geneqcdf['covLevel1'] = geneqcdf['nt']/geneqcdf['len']*100
-geneqcdf = geneqcdf[['Gene','len','Mean','covLevel1']]
-geneqcdf = pd.merge(geneqcdf,df[(df['cov']>=covLevel2)].groupby(['Gene']).sum().reset_index(),on=['Gene'],how='left',suffixes=['','_y'])
-geneqcdf['covLevel2'] = geneqcdf['nt']/geneqcdf['len']*100
-geneqcdf = geneqcdf[['Gene','len','Mean','covLevel1','covLevel2']]
-geneqcdf['Type'] = 'Gene'
-geneqcdf['Region'] = 'Gene'
-geneqcdf.fillna(0, inplace=True)
+#geneqcdf = df[['Gene','Start','End','len']].drop_duplicates().groupby(['Gene']).sum()[['len']].reset_index()
+#geneqcdf = pd.merge(geneqcdf,df.groupby(['Gene']).sum()[['tcov']].reset_index(),on=['Gene'],how='left')
+#geneqcdf['Mean'] = geneqcdf['tcov']/geneqcdf['len']
+#geneqcdf = pd.merge(geneqcdf,df[(df['cov']>=covLevel1)].groupby(['Gene']).sum().reset_index(),on=['Gene'],how='left',suffixes=['','_y'])
+#geneqcdf['covLevel1'] = geneqcdf['nt']/geneqcdf['len']*100
+#geneqcdf = geneqcdf[['Gene','len','Mean','covLevel1']]
+#geneqcdf = pd.merge(geneqcdf,df[(df['cov']>=covLevel2)].groupby(['Gene']).sum().reset_index(),on=['Gene'],how='left',suffixes=['','_y'])
+#geneqcdf['covLevel2'] = geneqcdf['nt']/geneqcdf['len']*100
+#geneqcdf = geneqcdf[['Gene','len','Mean','covLevel1','covLevel2']]
+#geneqcdf['Type'] = 'Gene'
+#geneqcdf['Region'] = 'Gene'
+#geneqcdf.fillna(0, inplace=True)
 
-covqcdf = pd.concat([covqcdf,geneqcdf[['Gene','Type','Region','Mean','covLevel1','covLevel2']]])
+#covqcdf = pd.concat([covqcdf,geneqcdf[['Gene','Type','Region','Mean','covLevel1','covLevel2']]])
 
 # low cov codons
-lowcovdf = df[(df['cov']<covLevel1)].sort_values(['Gene','transcriptPos']).reset_index()
-lowcovdf['Region'] = lowcovdf.apply(lambda row: [ pos2codon(int(row['CdsStart'])+1,int(row['CdsEnd']),int(row['transcriptPos']),x,row['Strand']) for x in range(max(int(row['
-CdsStart']),int(row['Start_b']))+1,min(int(row['CdsEnd']),int(row['End_b']))+1)],axis=1)
-lowcovdf = lowcovdf.explode('Region')[['Gene','Region','nt','tcov']]
-lowcovdf = lowcovdf[(lowcovdf.Region.notnull())]
-lowcovdf = lowcovdf.groupby(['Gene','Region']).sum().reset_index()
-lowcovdf['Mean'] = lowcovdf['tcov']/lowcovdf['nt']
-lowcovdf = pd.merge(lowcovdf.groupby(['Gene'])[['Mean']].mean().reset_index(),lowcovdf.groupby(['Gene'])['Region'].apply(list).apply(lambda x: make_ranges(x)).reset_index(),on='Gene')
-lowcovdf['covLevel1'] = 0
-lowcovdf['covLevel2'] = 0
-lowcovdf['Type'] = 'Codon'
+#lowcovdf = df[(df['cov']<covLevel1)].sort_values(['Gene','transcriptPos']).reset_index()
+#lowcovdf['Region'] = lowcovdf.apply(lambda row: [ pos2codon(int(row['CdsStart'])+1,int(row['CdsEnd']),int(row['transcriptPos']),x,row['Strand']) for x in range(max(int(row['CdsStart']),int(row['Start_b']))+1,min(int(row['CdsEnd']),int(row['End_b']))+1)],axis=1)
+#lowcovdf = lowcovdf.explode('Region')[['Gene','Region','nt','tcov']]
+#lowcovdf = lowcovdf[(lowcovdf.Region.notnull())]
+#lowcovdf = lowcovdf.groupby(['Gene','Region']).sum().reset_index()
+#lowcovdf['Mean'] = lowcovdf['tcov']/lowcovdf['nt']
+#lowcovdf = pd.merge(lowcovdf.groupby(['Gene'])[['Mean']].mean().reset_index(),lowcovdf.groupby(['Gene'])['Region'].apply(list).apply(lambda x: make_ranges(x)).reset_index(),on='Gene')
+#lowcovdf['covLevel1'] = 0
+#lowcovdf['covLevel2'] = 0
+#lowcovdf['Type'] = 'Codon'
 
-covqcdf = pd.concat([covqcdf,lowcovdf[['Gene','Type','Region','Mean','covLevel1','covLevel2']]])
+#covqcdf = pd.concat([covqcdf,lowcovdf[['Gene','Type','Region','Mean','covLevel1','covLevel2']]])
 
 
-covqcdf["Mean"] = covqcdf["Mean"].map(lambda x: float(x))
-covqcdf["covLevel1"] = covqcdf["covLevel1"].map(lambda x: float(x))
-covqcdf["covLevel2"] = covqcdf["covLevel2"].map(lambda x: float(x))
-covqcdf.fillna(0)
+#covqcdf["Mean"] = covqcdf["Mean"].map(lambda x: float(x))
+#covqcdf["covLevel1"] = covqcdf["covLevel1"].map(lambda x: float(x))
+#covqcdf["covLevel2"] = covqcdf["covLevel2"].map(lambda x: float(x))
+#covqcdf.fillna(0)
     
 # get haplotect output
 #haplotectdf = pd.read_csv(haplotect,sep='\t')
@@ -377,7 +376,8 @@ for variant in vcf:
     for i in variant.INFO['CSQ'].split(','):
         csq = i.split("|")
         # if this is the list of transcripts to use for annotation or if its not and its the 'picked' one'
-        if csq[vep['Feature']] in list(assaygenelist['transcriptId']): 
+        #if csq[vep['Feature']] in list(assaygenelist['transcriptId']): 
+        if csq[vep['PICK']] == '1': 
             transcript = csq[vep['Feature']]
             gene = csq[vep['SYMBOL']]
             csyntax = csq[vep['HGVSc']].split(":")
@@ -449,14 +449,14 @@ if variants.shape[0] > 0:
 else:
     print("None Detected\n")
 
-print("*** TIER 4 POLYMORPHISMS ***\n")
+#print("*** TIER 4 POLYMORPHISMS ***\n")
 
-if variants[variants['category']=='SNP'].shape[0] > 0:
-    print(variants[variants['category']=='SNP'].iloc[:,1:].to_csv(sep='\t',header=True, index=False))
-    jsonout['VARIANTS']['SNPS'] = variants[variants['category']=='SNP'].iloc[:,1:].to_dict('split')
-    del jsonout['VARIANTS']['SNPS']['index']
-else:
-    print("None Detected\n")
+#if variants[variants['category']=='SNP'].shape[0] > 0:
+#    print(variants[variants['category']=='SNP'].iloc[:,1:].to_csv(sep='\t',header=True, index=False))
+#    jsonout['VARIANTS']['SNPS'] = variants[variants['category']=='SNP'].iloc[:,1:].to_dict('split')
+#    del jsonout['VARIANTS']['SNPS']['index']
+#else:
+#    print("None Detected\n")
 
 #varcats = variants['category'].value_counts().to_dict()
 
@@ -484,44 +484,44 @@ for qc in ['MAPPING/ALIGNING SUMMARY','COVERAGE SUMMARY','UMI SUMMARY']:
 
 print()
 
-print("*** HOTSPOT QC ***\n")
+#print("*** HOTSPOT QC ***\n")
 
-xdf = covqcdf[(covqcdf.Type == "hotspot")][['Gene','Region','Mean']]
-xdf = xdf.rename(columns={"Region":"Hotspot"})
-xdf['QC'] = np.where(xdf['Mean'] < minTargetCov, '(!)', '')
-print(xdf.to_csv(sep='\t',header=True, index=False,float_format='%.1f'))
-jsonout['QC']['HOTSPOT QC'] = xdf.to_dict('split')
-jsonout['QC']['HOTSPOT QC'].pop('index', None)
+#xdf = covqcdf[(covqcdf.Type == "hotspot")][['Gene','Region','Mean']]
+#xdf = xdf.rename(columns={"Region":"Hotspot"})
+#xdf['QC'] = np.where(xdf['Mean'] < minTargetCov, '(!)', '')
+#print(xdf.to_csv(sep='\t',header=True, index=False,float_format='%.1f'))
+#jsonout['QC']['HOTSPOT QC'] = xdf.to_dict('split')
+#jsonout['QC']['HOTSPOT QC'].pop('index', None)
 
-print("*** GENE COVERAGE QC ***\n")
+#print("*** GENE COVERAGE QC ***\n")
 
-xdf = covqcdf[(covqcdf.Type == "Gene")][['Gene','Mean','covLevel1','covLevel2']]
-xdf['QC'] = np.where((xdf['Mean'] < covLevel2) | (xdf['covLevel1']<minTargetCov), '(!)', '')
-xdf = xdf.rename(columns={"covLevel1": str(covLevel1)+"x", "covLevel2": str(covLevel2)+"x"})
-print(xdf.to_csv(sep='\t',header=True, index=False,float_format='%.1f'))
+#xdf = covqcdf[(covqcdf.Type == "Gene")][['Gene','Mean','covLevel1','covLevel2']]
+#xdf['QC'] = np.where((xdf['Mean'] < covLevel2) | (xdf['covLevel1']<minTargetCov), '(!)', '')
+#xdf = xdf.rename(columns={"covLevel1": str(covLevel1)+"x", "covLevel2": str(covLevel2)+"x"})
+#print(xdf.to_csv(sep='\t',header=True, index=False,float_format='%.1f'))
 
-jsonout['QC']['GENE COVERAGE QC'] = xdf.to_dict('split')
-jsonout['QC']['GENE COVERAGE QC'].pop('index', None)
+#jsonout['QC']['GENE COVERAGE QC'] = xdf.to_dict('split')
+#jsonout['QC']['GENE COVERAGE QC'].pop('index', None)
 
-jsonout['QC']['FAILED GENES'] = ','.join(xdf[(xdf.QC!='')]['Gene'].tolist())
-jsonout['QC']['FAILED GENE COUNT'] = xdf[(xdf.QC!='')].shape[0]
+#jsonout['QC']['FAILED GENES'] = ','.join(xdf[(xdf.QC!='')]['Gene'].tolist())
+#jsonout['QC']['FAILED GENE COUNT'] = xdf[(xdf.QC!='')].shape[0]
 
-print("*** FAILED EXONS ***\n")
+#print("*** FAILED EXONS ***\n")
 
-xdf = covqcdf[(covqcdf.Type == "Exon")][['Region','Mean','covLevel1','covLevel2']]
-xdf['QC'] = np.where((xdf['Mean'] < covLevel2) | (xdf['covLevel1']<minTargetCov), '(!)', '')
-xdf = xdf.rename(columns={"covLevel1": str(covLevel1)+"x", "covLevel2": str(covLevel2)+"x"})
+#xdf = covqcdf[(covqcdf.Type == "Exon")][['Region','Mean','covLevel1','covLevel2']]
+#xdf['QC'] = np.where((xdf['Mean'] < covLevel2) | (xdf['covLevel1']<minTargetCov), '(!)', '')
+#xdf = xdf.rename(columns={"covLevel1": str(covLevel1)+"x", "covLevel2": str(covLevel2)+"x"})
 
-jsonout['QC']['EXON COVERAGE QC'] = xdf.to_dict('split')
-jsonout['QC']['EXON COVERAGE QC'].pop('index', None)
+#jsonout['QC']['EXON COVERAGE QC'] = xdf.to_dict('split')
+#jsonout['QC']['EXON COVERAGE QC'].pop('index', None)
 
-jsonout['QC']['FAILED EXONS'] = ','.join(xdf[(xdf.QC!='')]['Region'].tolist())
-jsonout['QC']['FAILED EXON COUNT'] = xdf[(xdf.QC!='')]['Region'].shape[0]
+#jsonout['QC']['FAILED EXONS'] = ','.join(xdf[(xdf.QC!='')]['Region'].tolist())
+#jsonout['QC']['FAILED EXON COUNT'] = xdf[(xdf.QC!='')]['Region'].shape[0]
 
-if xdf[(xdf.QC!='')].shape[0] > 0:
-    print(xdf[(xdf.QC!='')].to_csv(sep='\t',header=True, index=False,float_format='%.1f'))
-else:
-    print("NONE\n")
+#if xdf[(xdf.QC!='')].shape[0] > 0:
+#    print(xdf[(xdf.QC!='')].to_csv(sep='\t',header=True, index=False,float_format='%.1f'))
+#else:
+#    print("NONE\n")
 
 #print("*** Haplotect Contamination Estimate ***\n")
 

@@ -9,23 +9,24 @@ workflow Gatewayseq {
         File? DemuxSampleSheet
         String? IlluminaDir
 
+        String SvBed
+        String GeneBed
         String CoverageBed
         String JobGroup
         String OutputDir
         String Queue
+        String DragenQueue
     }
 
-    String DragenQueue = "duncavagee"
     String DragenReference = "/staging/runs/Chromoseq/refdata/dragen_hg38"
-    String Reference    = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.fa"
-    String ReferenceDict = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.dict"
+    String Reference       = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.fa"
+    String ReferenceDict   = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.dict"
 
     String VEP          = "/storage1/fs1/gtac-mgi/Active/CLE/reference/VEP_cache"
-    String QcMetrics    = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeqQCMetrics.json"
+    String QcMetrics    = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GatewaySeqQCMetrics.json"
+    String HaplotectBed = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/myeloseq.haplotect_snppairs_hg38.041718.bed"
 
-    String HaplotectBed = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq.haplotect_snppairs_hg38.041718.bed"
-
-    String QC_pl = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/QC_metrics.pl"
+    String QC_pl = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/QC_metrics.pl"
     String DemuxFastqDir = "/scratch1/fs1/gtac-mgi/CLE/gatewayseq/demux_fastq"
 
     Int readfamilysize = 1
@@ -62,6 +63,8 @@ workflow Gatewayseq {
                    SM=samples[6],
                    LB=samples[5] + '.' + samples[0],
                    readfamilysize=readfamilysize,
+                   SvBed=SvBed,
+                   GeneBed=GeneBed,
                    CoverageBed=CoverageBed,
                    OutputDir=OutputDir,
                    SubDir=samples[1] + '_' + samples[0],
@@ -99,11 +102,21 @@ workflow Gatewayseq {
                    queue=Queue,
                    jobGroup=JobGroup
         }
+
+        call make_report {
+            input: order_by=gather_files.done,
+                   Name=samples[1],
+                   CoverageBed=CoverageBed,
+                   QcMetrics=QcMetrics,
+                   SampleOutDir=OutputDir + '/' + samples[1] + '_' + samples[0],
+                   queue=Queue,
+                   jobGroup=JobGroup
+        }
     }
 
     if (defined(DemuxSampleSheet)){
         call move_demux_fastq {
-            input: order_by=gather_files.done,
+            input: order_by=make_report.done,
                    Batch=basename(OutputDir),
                    DemuxFastqDir=DemuxFastqDir,
                    queue=DragenQueue,
@@ -111,7 +124,7 @@ workflow Gatewayseq {
         }
 
         call remove_rundir {
-             input: order_by=gather_files.done,
+             input: order_by=make_report.done,
                     rundir=IlluminaDir,
                     queue=DragenQueue,
                     jobGroup=JobGroup
@@ -210,6 +223,8 @@ task dragen_align {
          String RG
          String SM
          String LB
+         String SvBed
+         String GeneBed
          String CoverageBed
          String OutputDir
          String SubDir
@@ -239,7 +254,7 @@ task dragen_align {
          /bin/mkdir ${LocalSampleDir} && \
          /bin/mkdir ${outdir} && \
          /bin/cp ${CoverageBed} ${LocalBedFile} && \
-         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} --enable-map-align true --enable-sort true --enable-map-align-output true --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 --vc-enable-orientation-bias-filter true --gc-metrics-enable=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --enable-variant-caller=true --vc-target-bed ${LocalBedFile} --umi-metrics-interval-file ${LocalBedFile} --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format CRAM &> ${log} && \
+         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} --enable-map-align true --enable-sort true --enable-map-align-output true --cnv-target-bed ${GeneBed} --vc-target-bed ${GeneBed} --sv-call-regions-bed ${SvBed} --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 --vc-enable-orientation-bias-filter true --vc-enable-triallelic-filter false --gc-metrics-enable=true --qc-coverage-ignore-overlaps=true --qc-coverage-region-1 ${GeneBed} --qc-coverage-reports-1 full_res --qc-coverage-region-2 ${SvBed} --qc-coverage-reports-2 full_res --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --enable-variant-caller=true --umi-metrics-interval-file ${LocalBedFile} --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format CRAM &> ${log} && \
          /bin/mv ${log} ./ && \
          /bin/mv ${LocalSampleDir} ${dragen_outdir} && \
          /bin/rm -f ${LocalBedFile}
@@ -389,6 +404,32 @@ task gather_files {
      }
      runtime {
          docker_image: "registry.gsc.wustl.edu/genome/lims-compute-xenial:1"
+         queue: queue
+         job_group: jobGroup
+     }
+     output {
+         String done = stdout()
+     }
+}
+
+task make_report {
+     input {
+         String order_by
+         String Name
+         String CoverageBed
+         String QcMetrics
+         String SampleOutDir
+         String queue
+         String jobGroup
+     }
+     command {
+         /usr/bin/python3 /storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/make_gwseq_report.py -n ${Name} -d ${SampleOutDir} -c ${CoverageBed} -q ${QcMetrics} && \
+         /bin/mv ./*.report.txt ./*.report.json ${SampleOutDir}
+     }
+     runtime {
+         docker_image: "registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v2"
+         cpu: "1"
+         memory: "16 G"
          queue: queue
          job_group: jobGroup
      }
