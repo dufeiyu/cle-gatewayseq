@@ -3,6 +3,7 @@
 import sys, os, re, tempfile, csv, pysam, json, binascii, argparse
 import pandas as pd
 import pyranges as pr
+#import pyensembl as pe
 import numpy as np
 from time import gmtime, strftime
 from cyvcf2 import VCF
@@ -70,10 +71,11 @@ def check_qc_reference_ranges(value, minimum, maximum, unit):
 # Script
 #
 
+minreads = 5
+
 parser = argparse.ArgumentParser(description='Make GatewaySeq report')
 parser.add_argument('-n','--name',required=True,help='Sample name')
 parser.add_argument('-d','--dir',required=True,help='Output directory')
-parser.add_argument('-c','--coverageqc',required=True,help='Coverage QC file')
 parser.add_argument('-q','--qcrangejsonfile',required=True,help='QCReferenceRanges.json')
 parser.add_argument('-m','--mrn',default='NONE',help='Sample MRN number')
 parser.add_argument('-a','--accession',default='NONE',help='Sample accession number')
@@ -82,7 +84,7 @@ parser.add_argument('-b','--DOB',default='NONE',help='Date of birth')
 parser.add_argument('-e','--exception',default='NONE',help='Exception')
 parser.add_argument('-f','--minvaf',default=2.0,help='Minimum VAF for discovery analysis')
 parser.add_argument('-i','--runinfostr',default='NONE',help='Illumina Run Information String')
-parser.add_argument('-p','--maxaf',default=0.02,help='Maximum population allele frequency for potential somatic variants')
+parser.add_argument('-p','--maxaf',default=0.001,help='Maximum population allele frequency for potential somatic variants')
 
 args = parser.parse_args()
 
@@ -93,18 +95,19 @@ caseinfo['DOB'] = args.DOB
 caseinfo['accession'] = args.accession
 caseinfo['specimen'] = args.specimen
 caseinfo['casedir'] = args.dir
-caseinfo['covqcbedfile'] = args.coverageqc
-caseinfo['maxaf'] = args.maxaf
+caseinfo['maxaf'] = float(args.maxaf)
 caseinfo['exception'] = args.exception
 caseinfo['run_info_str'] = args.runinfostr
 caseinfo['qcrange_file'] = args.qcrangejsonfile
-caseinfo['mindiscoveryvaf'] = float(args.minvaf)
+caseinfo['minvaf'] = float(args.minvaf)
 
 if caseinfo['specimen'] == 'BM':
     caseinfo['specimen'] = 'Bone Marrow'
 elif caseinfo['specimen'] == 'PB':
     caseinfo['specimen'] = 'Peripheral Blood'
 
+
+nonSynon = ['splice_acceptor_variant','splice_donor_variant','stop_gained','frameshift_variant','stop_lost','start_lost','transcript_amplification','inframe_insertion','inframe_deletion','missense_variant','protein_altering_variant']
 
 #########################################
 #
@@ -116,10 +119,10 @@ qcranges = {}
 with open(caseinfo['qcrange_file'], 'r') as json_file:
     qcranges = json.load(json_file)
 
-covLevel1 = int(qcranges['Coverage levels'][0])
-covLevel2 = int(qcranges['Coverage levels'][1])
-minTargetCov = float(qcranges['Target fraction at coverage'])
-
+minFractionCovered = float(qcranges['Target fraction at coverage'].split(',')[0])
+minTargetCoverage = float(qcranges['Minimum target coverage'].split(',')[0])
+minCoverage = float(qcranges['COVERAGE SUMMARY: Average alignment coverage over target region'].split(',')[0])
+transcripts = qcranges['Transcripts'].split(",")
 
 #########################################
 #
@@ -138,14 +141,13 @@ if not vcffile.is_file():
     
 mappingmetrics = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.mapping_metrics.csv'))[0]
 targetmetrics = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.target_bed_coverage_metrics.csv'))[0]
-coveragemetrics = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*_full_res.bed'))[0]
-if not mappingmetrics.is_file() or not targetmetrics.is_file() or not coveragemetrics.is_file():
+umimetrics = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.umi_metrics.csv'))[0]
+targetbed = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.qc-coverage-region-1_read_cov_report.bed'))[0]
+coveragebed = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.qc-coverage-region-1_full_res.bed'))[0]
+
+if not mappingmetrics.is_file() or not targetmetrics.is_file() or not umimetrics.is_file() or not targetbed.is_file() or not coveragebed.is_file():
     sys.exit("DRAGEN metrics files not found.")
 
-umimetrics = None
-#umimetrics = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.umi_metrics.csv'))[0]
-
-    
 #########################################
 #
 # Set up dataframes for all data
@@ -156,11 +158,10 @@ umimetrics = None
 qcdf = pd.DataFrame(columns=['metric','value'])
 
 # this is for exon/gene coverage metrics
-covqcdf = pd.DataFrame(columns=['Gene','Type','Region','Mean','covLevel1','covLevel2'])
+covqcdf = pd.DataFrame(columns=['Gene','Type','Region','Mean','Covered'])
 
 # dataframe with all variants
-variants = pd.DataFrame(columns=['type','chrom','pos','ref','alt','genotype','gene','transcript','consequence','csyntax','psyntax','exon','popaf','annotations','coverage','altreads','vaf'])
-
+variants = pd.DataFrame(columns=['category','type','filter','chrom','pos','ref','alt','gene','transcript','consequence','csyntax','psyntax','exon','popaf','annotations','coverage','altreads','vaf'])
 
 #########################################
 #
@@ -201,20 +202,22 @@ qcdf = pd.concat([qcdf,df])
 qcdf = pd.concat([qcdf,dfpct])
 
 # read in umi metrics
-if umimetrics is not None:
-    df = pd.read_csv(umimetrics,sep=',',names=['group','readgroup','metric','value','percent'])
-    df['group'] = 'UMI SUMMARY'
-    df = df.drop(columns='readgroup')
-    df['metric'] = df['group'] + ': ' + df['metric']
-    df = df.drop(columns='group')
-    dfpct = df[df['percent']==df['percent']].copy()
-    dfpct['metric'] = dfpct['metric'].apply(lambda x: x + ' (%)')
-    dfpct['value'] = dfpct['percent']
-    dfpct = dfpct.drop(columns='percent')
-    
-    qcdf = pd.concat([qcdf,df])
-    qcdf = pd.concat([qcdf,dfpct])
+df = pd.read_csv(umimetrics,sep=',',names=['group','readgroup','metric','value','percent'])
+df['group'] = 'UMI SUMMARY'
+df = df.drop(columns='readgroup')
+df['metric'] = df['group'] + ': ' + df['metric']
+df = df.drop(columns='group')
+dfpct = df[df['percent']==df['percent']].copy()
+dfpct['metric'] = dfpct['metric'].apply(lambda x: x + ' (%)')
+dfpct['value'] = dfpct['percent']
+dfpct = dfpct.drop(columns='percent')
+consensusReads = round(df.loc[df.metric=='UMI SUMMARY: Consensus pairs emitted','value'].astype(int).tolist()[0] * 2 / df.loc[df.metric=='UMI SUMMARY: Number of reads','value'].astype(int).tolist()[0] * 100,1)
+duplicateReads = round(100-consensusReads,1)
 
+dfpct = pd.concat([dfpct,pd.DataFrame.from_dict({0:['UMI SUMMARY: Consensus reads (%)',consensusReads],1:['UMI SUMMARY: Duplicate reads (%)',duplicateReads]},orient='index',columns=['metric','value'])],axis=0)
+
+qcdf = pd.concat([qcdf,df])
+qcdf = pd.concat([qcdf,dfpct])
     
 # read in target metrics
 df = pd.read_csv(targetmetrics,sep=',',names=['group','readgroup','metric','value','percent'])
@@ -230,89 +233,28 @@ qcdf = pd.concat([qcdf,dfpct])
 
 # get coverage info
 
-#print("Collecting coverage metrics...",file=sys.stderr)
-
 # intersect full res coverage bedfile w/ coverage QC bed file to calculate coverage
-#covQcBedPr = pr.PyRanges(pd.read_csv(caseinfo['covqcbedfile'], header=None, names="Chromosome Start End Exon Strand Gene len geneId transcriptId".split(), sep="\t"))
-#fullResCovPr = pr.PyRanges(pd.read_csv(coveragemetrics, header=None, names="Chromosome Start End cov".split(), sep="\t"))
-#df = covQcBedPr.join(fullResCovPr).df
-#df['nt'] = df[['End','End_b']].min(axis=1) - df[['Start','Start_b']].max(axis=1)
-#df['tcov'] = df['nt'] * df['cov']
+covBedPr = pr.PyRanges(pd.read_csv(targetbed, skiprows=1, header=None, names="Chromosome Start End Gene Region ReadCov R1Cov R2Cov".split(), sep="\t"))
+fullResCovPr = pr.PyRanges(pd.read_csv(coveragebed, header=None, names="Chromosome Start End Coverage".split(), sep="\t"))
+df = covBedPr.join(fullResCovPr).df
+df['nt'] = df[['End','End_b']].min(axis=1) - df[['Start','Start_b']].max(axis=1)
+df['tcov'] = df['nt'] * df['Coverage']
 
-# get hotspot qc
-#hotspotdf = df[(df.Exon=='HOTSPOTQC')].copy()
-#hotspotdf['Region'] = 'codon_' + hotspotdf['len']
-#hotspotdf['Gene'] = hotspotdf['Strand']
-#x = hotspotdf[['Gene','Region']].join(hotspotdf.groupby(['Gene','Region'])[['cov']].min(),on=['Gene','Region'])
-#x['Mean'] = x['cov']
-#x['covLevel1'] = x['cov'] > covLevel1
-#x['covLevel1'] = x['covLevel1'].replace({True:1,False:0})
-#x['covLevel2'] = x['cov'] > covLevel2
-#x['covLevel2'] = x['covLevel2'].replace({True:1,False:0})
-#x['Type'] = 'hotspot'
-#x = x.drop_duplicates()
+# mean gene coverage and fraction of gene targets at minTargetCov or higher 
+genecovdf = df[df.Region=='GOAL_genes'].groupby('Gene')[['nt','tcov']].sum().reset_index()
+genecovdf['Type'] = 'Gene'
+genecovdf['Region'] = 'Gene'
+genecovdf['Mean'] = genecovdf.apply(lambda v: v['tcov']/v['nt'],axis=1)
+genecovdf = pd.merge(genecovdf,df[(df.Region=='GOAL_genes') & (df.Coverage>=minTargetCoverage)].groupby('Gene')[['nt']].sum().reset_index().rename(columns={'nt':'Covered'}),on='Gene')
+genecovdf['Covered'] = genecovdf.Covered/genecovdf.nt*100
 
-#covqcdf = pd.concat([covqcdf,x[['Gene','Type','Region','Mean','covLevel1','covLevel2']]])
+covqcdf = pd.concat([covqcdf,genecovdf[['Gene','Type','Region','Mean','Covered']]])
 
-# get Gene and exon qc
-#df = df[df['Exon']!='HOTSPOTQC'].copy()
-#df['len'] = df['len'].astype(int)
-
-# get list of transcripts
-#assaygenelist = df[['Gene','geneId','transcriptId']].drop_duplicates()
-
-# exon qc
-#exonqcdf = df.groupby(['Gene','Exon','len']).sum()[['tcov']].reset_index()
-#exonqcdf['Mean'] = exonqcdf['tcov']/exonqcdf['len']
-#x = df[(df['cov']>=covLevel1)].groupby(['Gene','Exon','len']).sum().reset_index()
-#x['covLevel1']= x.nt/x.len*100
-#exonqcdf = pd.merge(exonqcdf,x[['Gene','Exon','len','covLevel1']],on=['Gene','Exon','len'],how='left')
-#x = df[(df['cov']>=covLevel2)].groupby(['Gene','Exon','len']).sum().reset_index()
-#x['covLevel2']= x.nt/x.len*100
-#exonqcdf = pd.merge(exonqcdf,x[['Gene','Exon','len','covLevel2']],on=['Gene','Exon','len'],how='left')
-#exonqcdf['Type'] = 'Exon'
-#exonqcdf['Region'] = exonqcdf['Exon']
-#exonqcdf.fillna(0, inplace=True)
-
-#covqcdf = pd.concat([covqcdf,exonqcdf[['Gene','Type','Region','Mean','covLevel1','covLevel2']]])
-
-# get Gene qc
 #
-#geneqcdf = df[['Gene','Start','End','len']].drop_duplicates().groupby(['Gene']).sum()[['len']].reset_index()
-#geneqcdf = pd.merge(geneqcdf,df.groupby(['Gene']).sum()[['tcov']].reset_index(),on=['Gene'],how='left')
-#geneqcdf['Mean'] = geneqcdf['tcov']/geneqcdf['len']
-#geneqcdf = pd.merge(geneqcdf,df[(df['cov']>=covLevel1)].groupby(['Gene']).sum().reset_index(),on=['Gene'],how='left',suffixes=['','_y'])
-#geneqcdf['covLevel1'] = geneqcdf['nt']/geneqcdf['len']*100
-#geneqcdf = geneqcdf[['Gene','len','Mean','covLevel1']]
-#geneqcdf = pd.merge(geneqcdf,df[(df['cov']>=covLevel2)].groupby(['Gene']).sum().reset_index(),on=['Gene'],how='left',suffixes=['','_y'])
-#geneqcdf['covLevel2'] = geneqcdf['nt']/geneqcdf['len']*100
-#geneqcdf = geneqcdf[['Gene','len','Mean','covLevel1','covLevel2']]
-#geneqcdf['Type'] = 'Gene'
-#geneqcdf['Region'] = 'Gene'
-#geneqcdf.fillna(0, inplace=True)
+# get genomic coordinates < min target coverage
+#
+lowcov = df[(df.Region=='GOAL_genes') & (df.Coverage<minTargetCoverage)]
 
-#covqcdf = pd.concat([covqcdf,geneqcdf[['Gene','Type','Region','Mean','covLevel1','covLevel2']]])
-
-# low cov codons
-#lowcovdf = df[(df['cov']<covLevel1)].sort_values(['Gene','transcriptPos']).reset_index()
-#lowcovdf['Region'] = lowcovdf.apply(lambda row: [ pos2codon(int(row['CdsStart'])+1,int(row['CdsEnd']),int(row['transcriptPos']),x,row['Strand']) for x in range(max(int(row['CdsStart']),int(row['Start_b']))+1,min(int(row['CdsEnd']),int(row['End_b']))+1)],axis=1)
-#lowcovdf = lowcovdf.explode('Region')[['Gene','Region','nt','tcov']]
-#lowcovdf = lowcovdf[(lowcovdf.Region.notnull())]
-#lowcovdf = lowcovdf.groupby(['Gene','Region']).sum().reset_index()
-#lowcovdf['Mean'] = lowcovdf['tcov']/lowcovdf['nt']
-#lowcovdf = pd.merge(lowcovdf.groupby(['Gene'])[['Mean']].mean().reset_index(),lowcovdf.groupby(['Gene'])['Region'].apply(list).apply(lambda x: make_ranges(x)).reset_index(),on='Gene')
-#lowcovdf['covLevel1'] = 0
-#lowcovdf['covLevel2'] = 0
-#lowcovdf['Type'] = 'Codon'
-
-#covqcdf = pd.concat([covqcdf,lowcovdf[['Gene','Type','Region','Mean','covLevel1','covLevel2']]])
-
-
-#covqcdf["Mean"] = covqcdf["Mean"].map(lambda x: float(x))
-#covqcdf["covLevel1"] = covqcdf["covLevel1"].map(lambda x: float(x))
-#covqcdf["covLevel2"] = covqcdf["covLevel2"].map(lambda x: float(x))
-#covqcdf.fillna(0)
-    
 # get haplotect output
 #haplotectdf = pd.read_csv(haplotect,sep='\t')
 #haplotectdf = haplotectdf.iloc[:, :-2]
@@ -341,6 +283,8 @@ for j in vcf.get_header_type('CSQ')['Description'].split("|"):
 
 # get variants
 for variant in vcf:
+
+    cat = 'Tier1-3'
     
     vartype = ''
     if len(variant.REF) == len(variant.ALT[0]):
@@ -348,13 +292,15 @@ for variant in vcf:
     else:
         vartype = 'INDEL'
 
-    if variant.FILTER is not None and variant.FILTER!='PASS':
-        continue
-
-    varfilter = variant.FILTER
-    
+    varfilter = 'PASS'
+    if variant.FILTER is not None:
+        varfilter = variant.FILTER
+ 
     abundance = round(variant.format('AF')[0][0] * 100,2)
 
+    if abundance < caseinfo['minvaf'] or variant.format('AD')[0][1] < minreads and varfilter=='PASS':
+        varfilter = 'LowReads'
+        
     gt = [variant.REF] + variant.ALT
     genotype = gt[variant.genotypes[0][0]] + '/' + gt[variant.genotypes[0][1]]
             
@@ -375,9 +321,9 @@ for variant in vcf:
     customannotation = 'NA'
     for i in variant.INFO['CSQ'].split(','):
         csq = i.split("|")
+        consequence = csq[vep['Consequence']].split("&")[0]
         # if this is the list of transcripts to use for annotation or if its not and its the 'picked' one'
-        #if csq[vep['Feature']] in list(assaygenelist['transcriptId']): 
-        if csq[vep['PICK']] == '1': 
+        if csq[vep['Feature']] in transcripts and consequence in nonSynon:
             transcript = csq[vep['Feature']]
             gene = csq[vep['SYMBOL']]
             csyntax = csq[vep['HGVSc']].split(":")
@@ -392,21 +338,26 @@ for variant in vcf:
                 psyntax = re.sub("\%3D","=",psyntax)
             else:
                 psyntax = csyntax
-
-            consequence = csq[vep['Consequence']].split("&")[0]
+            
             impact = csq[vep['IMPACT']]
             exon = csq[vep['EXON']] or 'NA'
             intron = csq[vep['INTRON']] or 'NA'
-            customannotation = csq[vep['Existing_variation']] or 'NA'
-            
+            customannotation = csq[vep['Existing_variation']] or 'NA'            
+                
             popmaf = 'NA'
             if csq[vep['MAX_AF']] != '':
                 popmaf = float(csq[vep['MAX_AF']])
 
+            if varfilter!='PASS':
+                cat = 'Filtered'
+                
+            elif popmaf!='NA' and popmaf >= caseinfo['maxaf']:
+                cat = 'SNP'
 
-    # do final categorization
+            else:
+                cat = 'Tier1-3'
 
-    variants = pd.concat([variants,pd.DataFrame([dict(zip(variants.columns,[vartype,str(variant.CHROM),str(variant.POS),variant.REF,variant.ALT[0],genotype,gene,transcript,consequence,csyntax,psyntax,exon,str(popmaf) + '%',customannotation,str(variant.format("DP")[0][0]),str(variant.format("AD")[0][0]),str(variant.format("AD")[0][1]),str(abundance)+"%"]))])])
+            variants = pd.concat([variants,pd.DataFrame([dict(zip(variants.columns,[cat,vartype,varfilter,str(variant.CHROM),str(variant.POS),variant.REF,variant.ALT[0],gene,transcript,consequence,csyntax,psyntax,exon,str(popmaf) + '%',customannotation,str(variant.format("DP")[0][0]),str(variant.format("AD")[0][1]),str(abundance)+"%"]))])])
 
 print("Starting report...",file=sys.stderr)
     
@@ -438,36 +389,36 @@ if (caseinfo['exception'] != 'NONE'):
     caseinfo['exception'] = caseinfo['exception'] + "\t(!)"
 print("EXCEPTIONS:\t" + caseinfo['exception'])
 
+print()
+
 jsonout['CASEINFO'] = caseinfo
 
 print("*** REPORTABLE MUTATIONS ***\n")
 
-if variants.shape[0] > 0:
-    print(variants.to_csv(sep='\t',header=True, index=False))
-    jsonout['VARIANTS'] = variants.to_dict('split')
-    del jsonout['VARIANTS']['index']
+if variants[variants['category']=='Tier1-3'].shape[0] > 0:
+    print(variants[variants['category']=='Tier1-3'].iloc[:,1:].to_csv(sep='\t',header=True, index=False))
+    jsonout['VARIANTS']['Tier1-3'] = variants[variants['category']=='Tier1-3'].iloc[:,1:].to_dict('split')
+    del jsonout['VARIANTS']['Tier1-3']['index']
 else:
     print("None Detected\n")
 
-#print("*** TIER 4 POLYMORPHISMS ***\n")
+print("*** FILTERED MUTATIONS ***\n")
 
-#if variants[variants['category']=='SNP'].shape[0] > 0:
-#    print(variants[variants['category']=='SNP'].iloc[:,1:].to_csv(sep='\t',header=True, index=False))
-#    jsonout['VARIANTS']['SNPS'] = variants[variants['category']=='SNP'].iloc[:,1:].to_dict('split')
-#    del jsonout['VARIANTS']['SNPS']['index']
-#else:
-#    print("None Detected\n")
+if variants[variants['category']=='Filtered'].shape[0] > 0:
+    print(variants[variants['category']=='Filtered'].iloc[:,1:].to_csv(sep='\t',header=True, index=False))
+    jsonout['VARIANTS']['Filtered'] = variants[variants['category']=='Filtered'].iloc[:,1:].to_dict('split')
+    del jsonout['VARIANTS']['Filtered']['index']
+else:
+    print("None Detected\n")
 
-#varcats = variants['category'].value_counts().to_dict()
+print("*** SNPS ***\n")
 
-#print("*** VARIANT COUNTS BY CATEGORY ***\n")
-#for l in ['Tier1-3','Low Level','Filtered','SNP','Genotyping','Silent/Not Reported']:
-#    if l not in varcats.keys():
-#        print(l + ":\t0")
-#    else:
-#        print(l + ":\t" + str(varcats[l]))
-
-#jsonout['QC']['VARIANTCOUNTS'] = varcats
+if variants[variants['category']=='SNPS'].shape[0] > 0:
+    print(variants[variants['category']=='SNPS'].iloc[:,1:].to_csv(sep='\t',header=True, index=False))
+    jsonout['VARIANTS']['SNPS'] = variants[variants['category']=='SNPS'].iloc[:,1:].to_dict('split')
+    del jsonout['VARIANTS']['SNPS']['index']
+else:
+    print("None Detected\n")
 
 print("\n*** SEQUENCING QC ***\n")
 
@@ -493,35 +444,15 @@ print()
 #jsonout['QC']['HOTSPOT QC'] = xdf.to_dict('split')
 #jsonout['QC']['HOTSPOT QC'].pop('index', None)
 
-#print("*** GENE COVERAGE QC ***\n")
+print("*** GENE COVERAGE QC ***\n")
 
-#xdf = covqcdf[(covqcdf.Type == "Gene")][['Gene','Mean','covLevel1','covLevel2']]
-#xdf['QC'] = np.where((xdf['Mean'] < covLevel2) | (xdf['covLevel1']<minTargetCov), '(!)', '')
-#xdf = xdf.rename(columns={"covLevel1": str(covLevel1)+"x", "covLevel2": str(covLevel2)+"x"})
-#print(xdf.to_csv(sep='\t',header=True, index=False,float_format='%.1f'))
+xdf = covqcdf[(covqcdf.Type == "Gene")][['Gene','Mean','Covered']]
+xdf['QC'] = np.where((xdf['Mean'] < minCoverage) | (xdf['Covered']<minFractionCovered), '(!)', '')
+xdf.rename(columns={'Covered':'%CoveredAt'+str(int(minTargetCoverage))+'x'},inplace=True)
+print(xdf.to_csv(sep='\t',header=True, index=False,float_format='%.1f'))
 
-#jsonout['QC']['GENE COVERAGE QC'] = xdf.to_dict('split')
-#jsonout['QC']['GENE COVERAGE QC'].pop('index', None)
-
-#jsonout['QC']['FAILED GENES'] = ','.join(xdf[(xdf.QC!='')]['Gene'].tolist())
-#jsonout['QC']['FAILED GENE COUNT'] = xdf[(xdf.QC!='')].shape[0]
-
-#print("*** FAILED EXONS ***\n")
-
-#xdf = covqcdf[(covqcdf.Type == "Exon")][['Region','Mean','covLevel1','covLevel2']]
-#xdf['QC'] = np.where((xdf['Mean'] < covLevel2) | (xdf['covLevel1']<minTargetCov), '(!)', '')
-#xdf = xdf.rename(columns={"covLevel1": str(covLevel1)+"x", "covLevel2": str(covLevel2)+"x"})
-
-#jsonout['QC']['EXON COVERAGE QC'] = xdf.to_dict('split')
-#jsonout['QC']['EXON COVERAGE QC'].pop('index', None)
-
-#jsonout['QC']['FAILED EXONS'] = ','.join(xdf[(xdf.QC!='')]['Region'].tolist())
-#jsonout['QC']['FAILED EXON COUNT'] = xdf[(xdf.QC!='')]['Region'].shape[0]
-
-#if xdf[(xdf.QC!='')].shape[0] > 0:
-#    print(xdf[(xdf.QC!='')].to_csv(sep='\t',header=True, index=False,float_format='%.1f'))
-#else:
-#    print("NONE\n")
+jsonout['QC']['GENE COVERAGE QC'] = xdf.to_dict('split')
+jsonout['QC']['GENE COVERAGE QC'].pop('index', None)
 
 #print("*** Haplotect Contamination Estimate ***\n")
 
