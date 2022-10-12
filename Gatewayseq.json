@@ -3,9 +3,10 @@
     "Gatewayseq.SampleSheet":"PATH",
     "Gatewayseq.OutputDir":"PATH",
     "Gatewayseq.IlluminaDir":"PATH",
-    "Gatewayseq.SvBed":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GWSeq.rearrangements.hg38.bed",
-    "Gatewayseq.GeneBed":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GWSeq.genes.hg38.bed",
+    "Gatewayseq.CNVSegBed":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GWSeq.genes.segment.hg38.bed",
+    "Gatewayseq.CNVNormFile":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/PON/NA12878.target.counts.gc-corrected.gz",
     "Gatewayseq.CoverageBed":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GWSeq.all.hg38.bed",
+    "Gatewayseq.CivicCachePath":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl",
     "Gatewayseq.JobGroup":"/cle/wdl/haloplex",
     "Gatewayseq.DragenQueue":"duncavagee",
     "Gatewayseq.Queue":"gtac-mgi"
