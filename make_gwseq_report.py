@@ -241,7 +241,7 @@ df['nt'] = df[['End','End_b']].min(axis=1) - df[['Start','Start_b']].max(axis=1)
 df['tcov'] = df['nt'] * df['Coverage']
 
 # mean gene coverage and fraction of gene targets at minTargetCov or higher 
-genecovdf = df[df.Region=='GOAL_genes'].groupby('Gene')[['nt','tcov']].sum().reset_index()
+genecovdf = df[df.Region.str.contains(r'GOAL_genes',na=False)].groupby('Gene')[['nt','tcov']].sum().reset_index()
 genecovdf['Type'] = 'Gene'
 genecovdf['Region'] = 'Gene'
 genecovdf['Mean'] = genecovdf.apply(lambda v: v['tcov']/v['nt'],axis=1)
