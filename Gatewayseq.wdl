@@ -9,9 +9,10 @@ workflow Gatewayseq {
         File? DemuxSampleSheet
         String? IlluminaDir
 
-        String SvBed
-        String GeneBed
+        String CNVSegBed
+        String CNVNormFile
         String CoverageBed
+        String CivicCachePath
         String JobGroup
         String OutputDir
         String Queue
@@ -26,11 +27,20 @@ workflow Gatewayseq {
     String QcMetrics    = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GatewaySeqQCMetrics.json"
     String HaplotectBed = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/myeloseq.haplotect_snppairs_hg38.041718.bed"
 
+    String SvNoiseFile = "/staging/runs/Chromoseq/dragen_align_inputs/hg38/WGS_v1.0.0_hg38_sv_systematic_noise.bedpe.gz"
+
     String QC_pl = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/QC_metrics.pl"
     String DemuxFastqDir = "/scratch1/fs1/gtac-mgi/CLE/gatewayseq/demux_fastq"
 
+
     Int readfamilysize = 1
 
+
+    call update_local_civic_cache {
+        input: CivicCachePath=CivicCachePath,
+               queue=Queue,
+               jobGroup=JobGroup
+    }
 
     if (defined(DemuxSampleSheet)){
         call dragen_demux {
@@ -63,18 +73,28 @@ workflow Gatewayseq {
                    SM=samples[6],
                    LB=samples[5] + '.' + samples[0],
                    readfamilysize=readfamilysize,
-                   SvBed=SvBed,
-                   GeneBed=GeneBed,
+                   CNVSegBed=CNVSegBed,
+                   CNVNormFile=CNVNormFile,
                    CoverageBed=CoverageBed,
+                   SvNoiseFile=SvNoiseFile,
                    OutputDir=OutputDir,
                    SubDir=samples[1] + '_' + samples[0],
                    queue=DragenQueue,
                    jobGroup=JobGroup
         }
 
-        call run_vep {
-            input: Vcf=dragen_align.vcf,
+        call run_civic {
+            input: order_by=update_local_civic_cache.done,
+                   CivicCachePath=CivicCachePath,
+                   Vcf=dragen_align.vcf,
                    VcfIndex=dragen_align.index,
+                   Name=samples[1],
+                   queue=Queue,
+                   jobGroup=JobGroup
+        }
+
+        call run_vep {
+            input: Vcf=run_civic.vcf,
                    refFasta=Reference,
                    Vepcache=VEP,
                    Name=samples[1],
@@ -161,7 +181,7 @@ task dragen_demux {
      >>>
 
      runtime {
-         docker_image: "seqfu/centos7-dragen-3.10.4:latest"
+         docker_image: "seqfu/centos7-dragen-4.0.3:latest"
          cpu: "20"
          memory: "200 G"
          queue: queue
@@ -223,9 +243,10 @@ task dragen_align {
          String RG
          String SM
          String LB
-         String SvBed
-         String GeneBed
+         String CNVSegBed
+         String CNVNormFile
          String CoverageBed
+         String SvNoiseFile
          String OutputDir
          String SubDir
          String jobGroup
@@ -238,7 +259,6 @@ task dragen_align {
      String batch = basename(OutputDir)
      String StagingDir = "/staging/runs/GatewaySeq/"
      String LocalAlignDir = StagingDir + "align/" + batch
-     String LocalBedFile = "/staging/runs/GatewaySeq/tmp/coverage.bed"
      String LocalSampleDir = LocalAlignDir + "/" + SubDir
      String log = StagingDir + "log/" + Name + "_align.log"
 
@@ -253,15 +273,13 @@ task dragen_align {
 
          /bin/mkdir ${LocalSampleDir} && \
          /bin/mkdir ${outdir} && \
-         /bin/cp ${CoverageBed} ${LocalBedFile} && \
-         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} --enable-map-align true --enable-sort true --enable-map-align-output true --cnv-target-bed ${GeneBed} --vc-target-bed ${GeneBed} --sv-call-regions-bed ${SvBed} --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 --vc-enable-orientation-bias-filter true --vc-enable-triallelic-filter false --gc-metrics-enable=true --qc-coverage-ignore-overlaps=true --qc-coverage-region-1 ${GeneBed} --qc-coverage-reports-1 full_res --qc-coverage-region-2 ${SvBed} --qc-coverage-reports-2 full_res --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --enable-variant-caller=true --umi-metrics-interval-file ${LocalBedFile} --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format CRAM &> ${log} && \
+         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} --enable-map-align true --enable-sort true --enable-map-align-output true --cnv-target-bed ${CoverageBed} --vc-target-bed ${CoverageBed} --sv-call-regions-bed ${CoverageBed} --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 --vc-enable-orientation-bias-filter true --vc-enable-triallelic-filter false --enable-sv true --sv-exome true --sv-output-contigs true --sv-systematic-noise ${SvNoiseFile} --enable-cnv true --cnv-enable-ref-calls false --cnv-segmentation-bed ${CNVSegBed} --cnv-segmentation-mode bed --cnv-normals-file ${CNVNormFile} --cnv-enable-gcbias-correction false --gc-metrics-enable=true --qc-coverage-ignore-overlaps=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --enable-variant-caller=true --umi-metrics-interval-file ${CoverageBed} --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format CRAM &> ${log} && \
          /bin/mv ${log} ./ && \
-         /bin/mv ${LocalSampleDir} ${dragen_outdir} && \
-         /bin/rm -f ${LocalBedFile}
+         /bin/mv ${LocalSampleDir} ${dragen_outdir}
      }
 
      runtime {
-         docker_image: "seqfu/centos7-dragen-3.10.4:latest"
+         docker_image: "seqfu/centos7-dragen-4.0.3:latest"
          cpu: "20"
          memory: "200 G"
          queue: queue
@@ -324,10 +342,56 @@ task remove_rundir {
      }
 }
 
-task run_vep {
+task update_local_civic_cache {
+     input {
+         String CivicCachePath
+         String jobGroup
+         String queue
+     }
+     command {
+         /usr/local/bin/civicpy update --hard --cache-save-path ${CivicCachePath}
+     }
+     runtime {
+         docker_image: "griffithlab/civicpy:1.1.1"
+         cpu: "1"
+         memory: "8 G"
+         queue: queue
+         job_group: jobGroup
+     }
+     output {
+         String done = stdout()
+     }
+}
+
+task run_civic {
      input {
          File Vcf
          File VcfIndex
+         String CivicCachePath
+         String order_by
+         String Name
+         String jobGroup
+         String queue
+     }
+     command {
+         export CIVICPY_CACHE_FILE=${CivicCachePath} && \
+         /usr/local/bin/civicpy annotate-vcf --input-vcf ${Vcf}  --output-vcf ${Name}.civic.vcf.gz --reference GRCh38 -i accepted
+     }
+     runtime {
+         docker_image: "griffithlab/civicpy:1.1.1"
+         cpu: "1"
+         memory: "10 G"
+         queue: queue
+         job_group: jobGroup
+     }
+     output {
+         File vcf = "${Name}.civic.vcf.gz"
+     }
+}
+
+task run_vep {
+     input {
+         File Vcf
          String refFasta
          String Vepcache
          Float? maxAF
@@ -336,6 +400,7 @@ task run_vep {
          String queue
      }
      command {
+         /usr/local/bin/tabix -p vcf ${Vcf} && \
          /usr/bin/perl -I /opt/vep/lib/perl/VEP/Plugins /opt/vep/src/ensembl-vep/vep --format vcf \
          --vcf --plugin Downstream --fasta ${refFasta} --hgvs --symbol --term SO --flag_pick \
          -i ${Vcf} --offline --cache --max_af --dir ${Vepcache} -o ${Name}.annotated.vcf && \
@@ -423,7 +488,7 @@ task make_report {
          String jobGroup
      }
      command {
-         /usr/bin/python3 /storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/make_gwseq_report.py -n ${Name} -d ${SampleOutDir} -c ${CoverageBed} -q ${QcMetrics} && \
+         /usr/bin/python3 /storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/make_gwseq_report.py -n ${Name} -d ${SampleOutDir} -q ${QcMetrics} && \
          /bin/mv ./*.report.txt ./*.report.json ${SampleOutDir}
      }
      runtime {
