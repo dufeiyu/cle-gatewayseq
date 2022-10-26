@@ -75,6 +75,8 @@ workflow Gatewayseq {
                    CNVfilterlength=CNVfilterlength,
                    CNVNormFile=CNVNormFile,
                    CoverageBed=CoverageBed,
+		   GeneCoverageBed=GeneCoverageBed,
+		   OtherCoverageBed=OtherCoverageBed,
                    SvNoiseFile=SvNoiseFile,
                    OutputDir=OutputDir,
                    SubDir=samples[1] + '_' + samples[0],
@@ -245,6 +247,8 @@ task dragen_align {
          String CNVfilterlength
          String CNVNormFile
          String CoverageBed
+	 String GeneCoverageBed
+	 String OtherCoverageBed
          String SvNoiseFile
          String OutputDir
          String SubDir
@@ -272,7 +276,7 @@ task dragen_align {
 
          /bin/mkdir ${LocalSampleDir} && \
          /bin/mkdir ${outdir} && \
-         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} --enable-map-align true --enable-sort true --enable-map-align-output true --cnv-target-bed ${CoverageBed} --vc-target-bed ${CoverageBed} --sv-call-regions-bed ${CoverageBed} --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 --vc-enable-orientation-bias-filter true --vc-enable-triallelic-filter false --enable-sv true --sv-exome true --sv-output-contigs true --sv-systematic-noise ${SvNoiseFile} --enable-cnv true --cnv-enable-ref-calls false --cnv-filter-length ${CNVfilterlength} --cnv-normals-file ${CNVNormFile} --gc-metrics-enable=true --qc-coverage-ignore-overlaps=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --enable-variant-caller=true --umi-metrics-interval-file ${CoverageBed} --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format CRAM &> ${log} && \
+         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} --enable-map-align true --enable-sort true --enable-map-align-output true --cnv-target-bed ${CoverageBed} --vc-target-bed ${GeneCoverageBed} --sv-call-regions-bed ${CoverageBed} --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 --vc-enable-orientation-bias-filter true --vc-enable-triallelic-filter false --enable-sv true --sv-exome true --sv-output-contigs true --sv-systematic-noise ${SvNoiseFile} --enable-cnv true --cnv-enable-ref-calls false --cnv-filter-length ${CNVfilterlength} --cnv-normals-file ${CNVNormFile} --gc-metrics-enable=true --qc-coverage-ignore-overlaps=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res --qc-coverage-region-2 ${OtherCoverageBed} --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --enable-variant-caller=true --umi-metrics-interval-file ${CoverageBed} --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format CRAM &> ${log} && \
          /bin/mv ${log} ./ && \
          /bin/mv ${LocalSampleDir} ${dragen_outdir}
      }
