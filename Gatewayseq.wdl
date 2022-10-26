@@ -11,6 +11,8 @@ workflow Gatewayseq {
 
         String CNVNormFile
         String CoverageBed
+        String GeneCoverageBed
+        String OtherCoverageBed
         String CivicCachePath
         String JobGroup
         String OutputDir
