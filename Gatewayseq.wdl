@@ -77,8 +77,8 @@ workflow Gatewayseq {
                    CNVfilterlength=CNVfilterlength,
                    CNVNormFile=CNVNormFile,
                    CoverageBed=CoverageBed,
-		   GeneCoverageBed=GeneCoverageBed,
-		   OtherCoverageBed=OtherCoverageBed,
+                   GeneCoverageBed=GeneCoverageBed,
+                   OtherCoverageBed=OtherCoverageBed,
                    SvNoiseFile=SvNoiseFile,
                    OutputDir=OutputDir,
                    SubDir=samples[1] + '_' + samples[0],
@@ -135,6 +135,14 @@ workflow Gatewayseq {
                    queue=Queue,
                    jobGroup=JobGroup
         }
+    }
+
+    call batch_qc {
+        input: order_by=make_report.done,
+               BatchDir=OutputDir,
+               QC_pl=QC_pl,
+               queue=Queue,
+               jobGroup=JobGroup
     }
 
     if (defined(DemuxSampleSheet)){
@@ -249,8 +257,8 @@ task dragen_align {
          String CNVfilterlength
          String CNVNormFile
          String CoverageBed
-	 String GeneCoverageBed
-	 String OtherCoverageBed
+         String GeneCoverageBed
+         String OtherCoverageBed
          String SvNoiseFile
          String OutputDir
          String SubDir
@@ -500,6 +508,33 @@ task make_report {
          docker_image: "registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v2"
          cpu: "1"
          memory: "16 G"
+         queue: queue
+         job_group: jobGroup
+     }
+     output {
+         String done = stdout()
+     }
+}
+
+task batch_qc {
+     input {
+         Array[String] order_by
+         String BatchDir
+         String QC_pl
+         String queue
+         String jobGroup
+     }
+
+     command {
+         if [ -n "$(/bin/ls -d ${BatchDir}/TW*)" ]; then
+             /bin/chmod -R 777 ${BatchDir}/TW*
+         fi
+
+         /usr/bin/perl ${QC_pl} ${BatchDir}
+     }
+     runtime {
+         docker_image: "registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v2"
+         memory: "4 G"
          queue: queue
          job_group: jobGroup
      }
