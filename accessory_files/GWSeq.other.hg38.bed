@@ -21,8 +21,8 @@ chr1	223806819	223806840	.	other_MSI|.|.
 chr10	844993	845012	.	other_MSI|.|.
 chr10	17991124	17991144	.	other_MSI|.|.
 chr10	26066975	26067065	.	haplotect|.|.
-chr10	26067061	26067087	.	haplotect|.|.
 chr10	26067061	26067088	.	haplotect|.|.
+chr10	26067061	26067087	.	haplotect|.|.
 chr10	26238058	26238182	341797_16245203_D10S197_downstream_1	GOAL_MSI|.|.
 chr10	26536221	26536241	.	other_MSI|.|.
 chr10	46758782	46758799	.	other_MSI|.|.
@@ -55,8 +55,8 @@ chr12	2887891	2887910	.	other_MSI|.|.
 chr12	49003507	49003521	.	other_MSI|.|.
 chr12	52314455	52314495	.	haplotect|.|.
 chr12	52319112	52319193	.	haplotect|.|.
-chr12	52468717	52468743	.	haplotect|.|.
 chr12	52468717	52468832	.	haplotect|.|.
+chr12	52468717	52468743	.	haplotect|.|.
 chr12	52468739	52468780	.	haplotect|.|.
 chr12	52468776	52468832	.	haplotect|.|.
 chr12	52468981	52468988	.	haplotect|.|.
@@ -105,8 +105,8 @@ chr16	14889229	14889250	.	other_MSI|.|.
 chr16	28902313	28902333	.	other_MSI|.|.
 chr16	29099075	29099098	.	other_MSI|.|.
 chr16	81170459	81170466	.	haplotect|.|.
-chr16	81173094	81173136	.	haplotect|.|.
 chr16	81173094	81173152	.	haplotect|.|.
+chr16	81173094	81173136	.	haplotect|.|.
 chr16	81220030	81220156	.	haplotect|.|.
 chr16	81220138	81220156	.	haplotect|.|.
 chr16	85648678	85648698	.	other_MSI|.|.
