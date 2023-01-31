@@ -34,7 +34,7 @@ workflow Gatewayseq {
     String MSIRefNormalDir = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/test/MSI/normal_ref_dir"
 
     String QC_pl = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/QC_metrics.pl"
-    String DemuxFastqDir = "/scratch1/fs1/gtac-mgi/CLE/gatewayseq/demux_fastq"
+    String DemuxFastqDir = "/storage1/fs1/gtac-mgi/Active/CLE/assay/gatewayseq/demux_fastq"
 
 
     Int readfamilysize  = 1
