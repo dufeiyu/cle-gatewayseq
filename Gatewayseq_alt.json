@@ -9,7 +9,8 @@
     "Gatewayseq.OtherCoverageBed":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GWSeq.other.hg38.bed",
     "Gatewayseq.CivicCachePath":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl",
     "Gatewayseq.JobGroup":"/cle/wdl/haloplex",
-    "Gatewayseq.DragenDockerImage":"docker1(seqfu/oracle8-dragen-4.0.3)",
-    "Gatewayseq.DragenQueue":"duncavagee",
+    "Gatewayseq.DragenEnv":"LSF_DOCKER_DRAGEN=y",
+    "Gatewayseq.DragenDockerImage":"gtac-mgi-dragen(seqfu/oracle8-dragen-4.0.3:latest)",
+    "Gatewayseq.DragenQueue":"dragen",
     "Gatewayseq.Queue":"gtac-mgi"
 }
