@@ -8,6 +8,7 @@ workflow Gatewayseq {
 
         File? DemuxSampleSheet
         String? IlluminaDir
+        String? DragenEnv
 
         String CNVNormFile
         String CoverageBed
@@ -18,6 +19,7 @@ workflow Gatewayseq {
         String OutputDir
         String Queue
         String DragenQueue
+        String DragenDockerImage
     }
 
     String DragenReference = "/staging/runs/Chromoseq/refdata/dragen_hg38"
@@ -51,6 +53,8 @@ workflow Gatewayseq {
             input: Dir=IlluminaDir,
                    OutputDir=OutputDir,
                    SampleSheet=DemuxSampleSheet,
+                   DragenEnv=DragenEnv,
+                   DragenDockerImage=DragenDockerImage,
                    queue=DragenQueue,
                    jobGroup=JobGroup
         }
@@ -87,6 +91,8 @@ workflow Gatewayseq {
                    MSIRefNormalDir=MSIRefNormalDir,
                    OutputDir=OutputDir,
                    SubDir=samples[1] + '_' + samples[0],
+                   DragenEnv=DragenEnv,
+                   DragenDockerImage=DragenDockerImage,
                    queue=DragenQueue,
                    jobGroup=JobGroup
         }
@@ -174,6 +180,8 @@ task dragen_demux {
          String? Dir
          String OutputDir
          File? SampleSheet
+         String? DragenEnv
+         String DragenDockerImage
          String jobGroup
          String queue
      }
@@ -197,7 +205,8 @@ task dragen_demux {
      >>>
 
      runtime {
-         docker_image: "seqfu/centos7-dragen-4.0.3:latest"
+         docker_image: DragenDockerImage
+         dragen_env: DragenEnv
          cpu: "20"
          memory: "200 G"
          queue: queue
@@ -238,7 +247,7 @@ task prepare_samples {
      >>>
 
      runtime {
-         docker_image: "registry.gsc.wustl.edu/genome/lims-compute-xenial:1"
+         docker_image: "docker1(registry.gsc.wustl.edu/genome/lims-compute-xenial:1)"
          cpu: "1"
          memory: "4 G"
          queue: queue
@@ -271,6 +280,8 @@ task dragen_align {
          String SubDir
          String jobGroup
          String queue
+         String DragenDockerImage
+         String? DragenEnv
 
          Int? TrimLen
          Int readfamilysize
@@ -293,13 +304,14 @@ task dragen_align {
 
          /bin/mkdir ${LocalSampleDir} && \
          /bin/mkdir ${outdir} && \
-         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} --enable-map-align true --enable-sort true --enable-map-align-output true --cnv-target-bed ${CoverageBed} --vc-target-bed ${GeneCoverageBed} --sv-call-regions-bed ${CoverageBed} --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 --vc-enable-orientation-bias-filter true --vc-enable-triallelic-filter false --enable-sv true --sv-exome true --sv-output-contigs true --sv-systematic-noise ${SvNoiseFile} --enable-cnv true --cnv-enable-ref-calls false --cnv-filter-length ${CNVfilterlength} --cnv-normals-file ${CNVNormFile} --gc-metrics-enable=true --qc-coverage-ignore-overlaps=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res --qc-coverage-region-2 ${OtherCoverageBed} --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --enable-variant-caller=true --umi-metrics-interval-file ${CoverageBed} --msi-command tumor-only --msi-coverage-threshold 60 --msi-microsatellites-file ${MSIMicroSatFile} --msi-ref-normal-dir ${MSIRefNormalDir} --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format CRAM &> ${log} && \
+         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} --enable-map-align true --enable-sort true --enable-map-align-output true --cnv-target-bed ${CoverageBed} --vc-target-bed ${GeneCoverageBed} --sv-call-regions-bed ${CoverageBed} --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 --vc-enable-orientation-bias-filter true --vc-enable-triallelic-filter false --enable-sv true --sv-exome true --sv-output-contigs true --sv-systematic-noise ${SvNoiseFile} --enable-cnv true --cnv-enable-ref-calls false --cnv-filter-length ${CNVfilterlength} --cnv-normals-list ${CNVNormFile} --gc-metrics-enable=true --qc-coverage-ignore-overlaps=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res --qc-coverage-region-2 ${OtherCoverageBed} --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --enable-variant-caller=true --umi-metrics-interval-file ${CoverageBed} --msi-command tumor-only --msi-coverage-threshold 60 --msi-microsatellites-file ${MSIMicroSatFile} --msi-ref-normal-dir ${MSIRefNormalDir} --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format CRAM &> ${log} && \
          /bin/mv ${log} ./ && \
          /bin/mv ${LocalSampleDir} ${dragen_outdir}
      }
 
      runtime {
-         docker_image: "seqfu/centos7-dragen-4.0.3:latest"
+         docker_image: DragenDockerImage
+         dragen_env: DragenEnv
          cpu: "20"
          memory: "200 G"
          queue: queue
@@ -331,7 +343,7 @@ task move_demux_fastq {
          fi
      }
      runtime {
-         docker_image: "ubuntu:xenial"
+         docker_image: "docker1(ubuntu:xenial)"
          queue: queue
          job_group: jobGroup
      }
@@ -353,7 +365,7 @@ task remove_rundir {
          fi
      }
      runtime {
-         docker_image: "ubuntu:xenial"
+         docker_image: "docker1(ubuntu:xenial)"
          queue: queue
          job_group: jobGroup
      }
@@ -372,7 +384,7 @@ task update_local_civic_cache {
          /usr/local/bin/civicpy update --hard --cache-save-path ${CivicCachePath}
      }
      runtime {
-         docker_image: "griffithlab/civicpy:1.1.1"
+         docker_image: "docker1(griffithlab/civicpy:1.1.1)"
          cpu: "1"
          memory: "8 G"
          queue: queue
@@ -398,7 +410,7 @@ task run_civic {
          /usr/local/bin/civicpy annotate-vcf --input-vcf ${Vcf}  --output-vcf ${Name}.civic.vcf.gz --reference GRCh38 -i accepted
      }
      runtime {
-         docker_image: "griffithlab/civicpy:1.1.1"
+         docker_image: "docker1(griffithlab/civicpy:1.1.1)"
          cpu: "1"
          memory: "10 G"
          queue: queue
@@ -427,7 +439,7 @@ task run_vep {
          /usr/local/bin/bgzip ${Name}.annotated.vcf && /usr/local/bin/tabix -p vcf ${Name}.annotated.vcf.gz
      }
      runtime {
-         docker_image: "registry.gsc.wustl.edu/mgi-cle/vep105-htslib1.9:1"
+         docker_image: "docker1(registry.gsc.wustl.edu/mgi-cle/vep105-htslib1.9:1)"
          cpu: "1"
          memory: "10 G"
          queue: queue
@@ -461,7 +473,7 @@ task run_haplotect {
      >>>
 
      runtime {
-         docker_image: "registry.gsc.wustl.edu/mgi-cle/haplotect:0.3"
+         docker_image: "docker1(registry.gsc.wustl.edu/mgi-cle/haplotect:0.3)"
          cpu: "1"
          memory: "8 G"
          queue: queue
@@ -488,7 +500,7 @@ task gather_files {
          /bin/mv -f -t ${OutputDir}/${SubDir} ${sep=" " OutputFiles}
      }
      runtime {
-         docker_image: "registry.gsc.wustl.edu/genome/lims-compute-xenial:1"
+         docker_image: "docker1(registry.gsc.wustl.edu/genome/lims-compute-xenial:1)"
          queue: queue
          job_group: jobGroup
      }
@@ -512,7 +524,7 @@ task make_report {
          /bin/mv ./*.report.txt ./*.report.json ${SampleOutDir}
      }
      runtime {
-         docker_image: "registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v2"
+         docker_image: "docker1(registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v2)"
          cpu: "1"
          memory: "16 G"
          queue: queue
@@ -540,7 +552,7 @@ task batch_qc {
          /usr/bin/perl ${QC_pl} ${BatchDir}
      }
      runtime {
-         docker_image: "registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v2"
+         docker_image: "docker1(registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v2)"
          memory: "4 G"
          queue: queue
          job_group: jobGroup
