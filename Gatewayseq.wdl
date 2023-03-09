@@ -11,6 +11,7 @@ workflow Gatewayseq {
         String? DragenEnv
 
         String CNVNormFile
+        String CNVSegBed
         String CoverageBed
         String GeneCoverageBed
         String OtherCoverageBed
@@ -20,6 +21,9 @@ workflow Gatewayseq {
         String Queue
         String DragenQueue
         String DragenDockerImage
+
+        Int readfamilysize
+        Int CNVfilterlength
     }
 
     String DragenReference = "/staging/runs/Chromoseq/refdata/dragen_hg38"
@@ -27,6 +31,7 @@ workflow Gatewayseq {
     String ReferenceDict   = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.dict"
 
     String VEP          = "/storage1/fs1/gtac-mgi/Active/CLE/reference/VEP_cache"
+    String NirvanaDB    = "/storage1/fs1/gtac-mgi/Active/CLE/reference/dragen_align_inputs/hg38/nirvana_annotation_data"
     String QcMetrics    = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GatewaySeqQCMetrics.json"
     String HaplotectBed = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/myeloseq.haplotect_snppairs_hg38.041718.bed"
 
@@ -39,8 +44,6 @@ workflow Gatewayseq {
     String DemuxFastqDir = "/storage1/fs1/gtac-mgi/Active/CLE/assay/gatewayseq/demux_fastq"
 
 
-    Int readfamilysize  = 1
-    Int CNVfilterlength = 100000
 
     call update_local_civic_cache {
         input: CivicCachePath=CivicCachePath,
@@ -83,6 +86,8 @@ workflow Gatewayseq {
                    readfamilysize=readfamilysize,
                    CNVfilterlength=CNVfilterlength,
                    CNVNormFile=CNVNormFile,
+                   CNVSegBed=CNVSegBed,
+                   NirvanaDB=NirvanaDB,
                    CoverageBed=CoverageBed,
                    GeneCoverageBed=GeneCoverageBed,
                    OtherCoverageBed=OtherCoverageBed,
@@ -270,6 +275,8 @@ task dragen_align {
          String LB
          String CNVfilterlength
          String CNVNormFile
+         String CNVSegBed
+         String NirvanaDB
          String CoverageBed
          String GeneCoverageBed
          String OtherCoverageBed
@@ -304,7 +311,19 @@ task dragen_align {
 
          /bin/mkdir ${LocalSampleDir} && \
          /bin/mkdir ${outdir} && \
-         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} --enable-map-align true --enable-sort true --enable-map-align-output true --cnv-target-bed ${CoverageBed} --vc-target-bed ${GeneCoverageBed} --sv-call-regions-bed ${CoverageBed} --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 --vc-enable-orientation-bias-filter true --vc-enable-triallelic-filter false --enable-sv true --sv-exome true --sv-output-contigs true --sv-systematic-noise ${SvNoiseFile} --enable-cnv true --cnv-enable-ref-calls false --cnv-filter-length ${CNVfilterlength} --cnv-normals-list ${CNVNormFile} --gc-metrics-enable=true --qc-coverage-ignore-overlaps=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res --qc-coverage-region-2 ${OtherCoverageBed} --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --enable-variant-caller=true --umi-metrics-interval-file ${CoverageBed} --msi-command tumor-only --msi-coverage-threshold 60 --msi-microsatellites-file ${MSIMicroSatFile} --msi-ref-normal-dir ${MSIRefNormalDir} --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format CRAM &> ${log} && \
+         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} \
+         --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --umi-metrics-interval-file ${CoverageBed} \
+         --enable-map-align true --enable-sort true --enable-map-align-output true --gc-metrics-enable=true \
+         --qc-coverage-ignore-overlaps=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res --qc-coverage-region-2 ${OtherCoverageBed} \
+         --enable-variant-caller=true --vc-target-bed ${GeneCoverageBed} --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 \
+         --vc-enable-orientation-bias-filter true --vc-enable-triallelic-filter false \
+         --enable-sv true --sv-call-regions-bed ${CoverageBed} --sv-exome true --sv-output-contigs true --sv-systematic-noise ${SvNoiseFile} \
+         --enable-cnv true --cnv-target-bed ${CoverageBed} --cnv-enable-ref-calls false --cnv-filter-length ${CNVfilterlength} \
+         --cnv-normals-list ${CNVNormFile} --cnv-segmentation-mode bed --cnv-segmentation-bed ${CNVSegBed} \
+         --enable-tmb true --qc-coverage-region-3 ${CoverageBed} --qc-coverage-tag-3=tmb --qc-coverage-reports-3=callability \
+         --enable-variant-annotation true --variant-annotation-assembly GRCh38 --variant-annotation-data ${NirvanaDB} \
+         --msi-command tumor-only --msi-coverage-threshold 60 --msi-microsatellites-file ${MSIMicroSatFile} --msi-ref-normal-dir ${MSIRefNormalDir} \
+         --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format CRAM &> ${log} && \
          /bin/mv ${log} ./ && \
          /bin/mv ${LocalSampleDir} ${dragen_outdir}
      }
@@ -384,7 +403,7 @@ task update_local_civic_cache {
          /usr/local/bin/civicpy update --hard --cache-save-path ${CivicCachePath}
      }
      runtime {
-         docker_image: "docker1(griffithlab/civicpy:1.1.1)"
+         docker_image: "docker1(griffithlab/civicpy:3.0.0)"
          cpu: "1"
          memory: "8 G"
          queue: queue
@@ -410,7 +429,7 @@ task run_civic {
          /usr/local/bin/civicpy annotate-vcf --input-vcf ${Vcf}  --output-vcf ${Name}.civic.vcf.gz --reference GRCh38 -i accepted
      }
      runtime {
-         docker_image: "docker1(griffithlab/civicpy:1.1.1)"
+         docker_image: "docker1(griffithlab/civicpy:3.0.0)"
          cpu: "1"
          memory: "10 G"
          queue: queue
