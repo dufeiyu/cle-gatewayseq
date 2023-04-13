@@ -317,8 +317,9 @@ task dragen_align {
          --qc-coverage-ignore-overlaps=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res --qc-coverage-region-2 ${OtherCoverageBed} \
          --enable-variant-caller=true --vc-target-bed ${GeneCoverageBed} --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 \
          --vc-enable-orientation-bias-filter true --vc-enable-triallelic-filter false \
-         --enable-sv true --sv-call-regions-bed ${CoverageBed} --sv-exome true --sv-output-contigs true --sv-systematic-noise ${SvNoiseFile} \
-         --enable-cnv true --cnv-target-bed ${CoverageBed} --cnv-enable-ref-calls false --cnv-filter-length ${CNVfilterlength} \
+         --enable-sv true --sv-exome true --sv-output-contigs true --sv-systematic-noise ${SvNoiseFile} --sv-hyper-sensitivity true \
+         --sv-min-edge-observations 2 --sv-min-candidate-spanning-count 1 --sv-use-overlap-pair-evidence true \
+         --enable-cnv true --cnv-target-bed ${GeneCoverageBed} --cnv-enable-ref-calls false --cnv-filter-length ${CNVfilterlength} \
          --cnv-normals-list ${CNVNormFile} --cnv-segmentation-mode bed --cnv-segmentation-bed ${CNVSegBed} \
          --enable-tmb true --qc-coverage-region-3 ${CoverageBed} --qc-coverage-tag-3=tmb --qc-coverage-reports-3=callability \
          --enable-variant-annotation true --variant-annotation-assembly GRCh38 --variant-annotation-data ${NirvanaDB} \
