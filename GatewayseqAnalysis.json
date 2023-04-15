@@ -1,0 +1,18 @@
+{	
+    "GatewayseqAnalysis.Name":"",
+    "GatewayseqAnalysis.SubDir":"",
+    "GatewayseqAnalysis.OutputDir":"",
+    "GatewayseqAnalysis.DragenCram":"",
+    "GatewayseqAnalysis.DragenCramIndex":"",
+    "GatewayseqAnalysis.DragenVcf":"",
+    "GatewayseqAnalysis.DragenVcfIndex":"",
+    "GatewayseqAnalysis.refFasta":"/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.fa",
+    "GatewayseqAnalysis.ReferenceDict":"/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.dict",
+    "GatewayseqAnalysis.Vepcache":"/storage1/fs1/gtac-mgi/Active/CLE/reference/VEP_cache",
+    "GatewayseqAnalysis.QcMetrics":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GatewaySeqQCMetrics.json",
+    "GatewayseqAnalysis.CoverageBed":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GWSeq.all.hg38.bed",
+    "GatewayseqAnalysis.HaplotectBed":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/myeloseq.haplotect_snppairs_hg38.041718.bed", 
+    "GatewayseqAnalysis.CivicCachePath":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl",
+    "GatewayseqAnalysis.JobGroup":"/cle/wdl/haloplex",
+    "GatewayseqAnalysis.Queue":"gtac-mgi"
+}
