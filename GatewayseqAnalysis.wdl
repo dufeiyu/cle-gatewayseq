@@ -47,7 +47,6 @@ workflow GatewayseqAnalysis {
 
     call filter_sv {
         input: Vcf=DragenSVVCF,
-               Bed=CoverageBed,
                Name=Name,
                MinReads=MinSVReads,
                queue=Queue,
@@ -165,7 +164,6 @@ task filter_sv {
             
         String Vcf
         String Name
-        String Bed
         Int MinReads
     
         String jobGroup
@@ -174,8 +172,7 @@ task filter_sv {
     }
 
     command {
-        grep Fusion ${Bed} > sv_region.bed && \
-        bcftools view -i 'SVTYPE=="BND" && FMT/SR[0:1]>=${MinReads}' -R sv_region.bed -Oz -o ${Name}.sv.filtered.vcf.gz $Vcf && \
+        bcftools view -i 'SVTYPE=="BND" && FMT/SR[0:1]>=${MinReads}' -Oz -o ${Name}.sv.filtered.vcf.gz $Vcf && \
         tabix -p vcf $Name".sv.filtered.vcf.gz"
     }
 
