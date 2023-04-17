@@ -7,10 +7,11 @@ workflow GatewayseqAnalysis {
         String DragenCramIndex
         String DragenVcf
         String DragenVcfIndex
-
+        String DragenSVVCF
+        
         String refFasta 
         String ReferenceDict
-        String Vepcache
+        String Vepcache        
 
         String QcMetrics
         String CoverageBed
@@ -24,6 +25,8 @@ workflow GatewayseqAnalysis {
         String JobGroup 
     }
 
+    Int MinSVReads = 10
+    
     call run_civic {
         input: CivicCachePath=CivicCachePath,
                Vcf=DragenVcf,
@@ -42,6 +45,25 @@ workflow GatewayseqAnalysis {
                jobGroup=JobGroup
     }
 
+    call filter_sv {
+        input: Vcf=DragenSVVCF,
+               Bed=CoverageBed,
+               Name=Name,
+               MinReads=MinSVReads,
+               queue=Queue,
+               jobGroup=JobGroup
+    }
+
+    call annotate_sv {
+        input: Vcf=filter_sv.vcf,
+               refFasta=refFasta,
+               Vepcache=Vepcache,
+               Name=Name,
+               queue=Queue,
+               jobGroup=JobGroup
+    }
+
+
     call run_haplotect {
         input: refFasta=refFasta,
                refDict=ReferenceDict,
@@ -56,7 +78,9 @@ workflow GatewayseqAnalysis {
     call gather_files {
         input: OutputFiles=[run_haplotect.out_file,
                run_haplotect.sites_file,
-               run_vep.vcf],
+               run_vep.vcf,run_vep.index,
+               annotate_sv.vcf,
+               annotate_sv.index],
                OutputDir=OutputDir,
                SubDir=SubDir,
                queue=Queue,
@@ -130,9 +154,81 @@ task run_vep {
          job_group: jobGroup
      }
      output {
-         File vcf = "${Name}.annotated.vcf.gz"
+        File vcf = "${Name}.annotated.vcf.gz"
+        File index = "${Name}.annotated.vcf.gz.tbi"
+
      }
 }
+
+task filter_sv {
+    input { 
+            
+        String Vcf
+        String Name
+        String Bed
+        Int MinReads
+    
+        String jobGroup
+        String queue
+    
+    }
+
+    command {
+        grep Fusion ${Bed} > sv_region.bed && \
+        bcftools view -i 'SVTYPE=="BND" && FMT/SR[0:1]>=${MinReads}' -R sv_region.bed -Oz -o ${Name}.sv.filtered.vcf.gz $Vcf && \
+        tabix -p vcf $Name".sv.filtered.vcf.gz"
+    }
+
+    runtime {
+         docker_image: "docker1(ghcr.io/dhslab/docker-baseimage:latest)"
+         cpu: "1"
+         memory: "10 G"
+         queue: queue
+         job_group: jobGroup
+     }
+
+     output {
+        File vcf = "${Name}.sv.filtered.vcf.gz"
+        File index = "${Name}.sv.filtered.vcf.gz.tbi"
+
+     }
+}
+
+task annotate_sv {
+    input { 
+            
+        String Vcf
+        String Name
+    
+        String refFasta
+        String Vepcache
+    
+        String jobGroup
+        String queue
+    
+    }
+
+    command {
+        /usr/bin/perl -I /opt/vep/lib/perl/VEP/Plugins /opt/vep/src/ensembl-vep/vep --format vcf --vcf --fasta ${refFasta} \
+        --per_gene --symbol --term SO -o ${Name}.sv.annotated.vcf -i ${Vcf} --offline --cache --dir ${Vepcache} && \
+        /usr/local/bin/bgzip ${Name}.sv.annotated.vcf && /usr/local/bin/tabix -p vcf ${Name}.sv.annotated.vcf.gz
+    }
+
+    runtime {
+         docker_image: "docker1(registry.gsc.wustl.edu/mgi-cle/vep105-htslib1.9:1)"
+         cpu: "1"
+         memory: "10 G"
+         queue: queue
+         job_group: jobGroup
+     }
+
+     output {
+        File vcf = "${Name}.sv.annotated.vcf.gz"
+        File index = "${Name}.sv.annotated.vcf.gz.tbi"
+
+     }
+}
+
 
 task run_haplotect {
      input {

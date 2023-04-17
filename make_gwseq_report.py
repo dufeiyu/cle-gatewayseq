@@ -3,7 +3,6 @@
 import sys, os, re, tempfile, csv, pysam, json, binascii, argparse
 import pandas as pd
 import pyranges as pr
-#import pyensembl as pe
 import numpy as np
 from time import gmtime, strftime
 from cyvcf2 import VCF
@@ -71,8 +70,6 @@ def check_qc_reference_ranges(value, minimum, maximum, unit):
 # Script
 #
 
-minreads = 5
-
 parser = argparse.ArgumentParser(description='Make GatewaySeq report')
 parser.add_argument('-n','--name',required=True,help='Sample name')
 parser.add_argument('-d','--dir',required=True,help='Output directory')
@@ -82,7 +79,9 @@ parser.add_argument('-a','--accession',default='NONE',help='Sample accession num
 parser.add_argument('-s','--specimen',default='NONE',help='Sample specimen type')
 parser.add_argument('-b','--DOB',default='NONE',help='Date of birth')
 parser.add_argument('-e','--exception',default='NONE',help='Exception')
-parser.add_argument('-f','--minvaf',default=2.0,help='Minimum VAF for discovery analysis')
+parser.add_argument('-f','--minvaf',default=5.0,help='Minimum validated VAF')
+parser.add_argument('-r','--minreads',default=5.0,help='Minimum alt reads to report variant')
+parser.add_argument('-x','--excludevaf',default=1.0,help='Minimum VAF for reporting, below this will not be shown')
 parser.add_argument('-i','--runinfostr',default='NONE',help='Illumina Run Information String')
 parser.add_argument('-p','--maxaf',default=0.001,help='Maximum population allele frequency for potential somatic variants')
 
@@ -100,12 +99,14 @@ caseinfo['exception'] = args.exception
 caseinfo['run_info_str'] = args.runinfostr
 caseinfo['qcrange_file'] = args.qcrangejsonfile
 caseinfo['minvaf'] = float(args.minvaf)
+caseinfo['minreads'] = float(args.minreads)
+
+excludevaf = float(args.excludevaf)
 
 if caseinfo['specimen'] == 'BM':
     caseinfo['specimen'] = 'Bone Marrow'
 elif caseinfo['specimen'] == 'PB':
     caseinfo['specimen'] = 'Peripheral Blood'
-
 
 nonSynon = ['splice_acceptor_variant','splice_donor_variant','stop_gained','frameshift_variant','stop_lost','start_lost','transcript_amplification','inframe_insertion','inframe_deletion','missense_variant','protein_altering_variant']
 
@@ -134,11 +135,15 @@ vcffile = list(Path(caseinfo['casedir']).rglob('*.annotated.vcf.gz'))[0]
 if not vcffile.is_file():
     sys.exit("VCF file " + str(vcffile) + " not valid.")
 
-#haplotect = list(Path(caseinfo['casedir']).rglob('*.haplotect.txt'))[0]
-#haplotectloci = list(Path(caseinfo['casedir']).rglob('*.haplotectloci.txt'))[0]
-#if not haplotect.is_file() or not haplotectloci.is_file():
-#    sys.exit("Haplotect output " + str(haplotect) + " not valid.")
-    
+cnvsegoutput = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.seg.called.merged'))[0]
+if not cnvsegoutput.is_file():
+    sys.exit("CNV file " + str(cnvsegoutput) + " not valid.")
+
+haplotect = list(Path(caseinfo['casedir']).rglob('*.haplotect.txt'))[0]
+haplotectloci = list(Path(caseinfo['casedir']).rglob('*.haplotectloci.txt'))[0]
+if not haplotect.is_file() or not haplotectloci.is_file():
+    sys.exit("Haplotect output " + str(haplotect) + " not valid.")
+
 mappingmetrics = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.mapping_metrics.csv'))[0]
 targetmetrics = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.target_bed_coverage_metrics.csv'))[0]
 umimetrics = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.umi_metrics.csv'))[0]
@@ -259,14 +264,6 @@ genecovdf['Covered'] = genecovdf.Covered/genecovdf.nt*100
 #othercovdf = pd.merge(othercovdf,df[df.Region.str.contains(r'_MSI|haplotect',na=False) & (df.Coverage>=minTargetCoverage)].groupby('Gene')[['nt']].sum().reset_index().rename(columns={'nt':'Covered','Gene':'Region'}),on='Region')
 #othercovdf['Covered'] = othercovdf.Covered/genecovdf.nt*100
 
-
-#
-# get genomic coordinates < min target coverage
-#
-#lowcov = df[(df.Region=='GOAL_genes') & (df.Coverage<minTargetCoverage)]
-
-# get rearrangement coverage info
-
 # intersect full res coverage bedfile w/ coverage QC bed file to calculate coverage
 covBedPr = pr.PyRanges(pd.read_csv(svtargetbed, skiprows=1, header=None, names="Chromosome Start End Gene Region ReadCov R1Cov R2Cov".split(), sep="\t"))
 
@@ -288,17 +285,16 @@ svcovdf['Covered'] = svcovdf.Covered/svcovdf.nt*100
 covqcdf = pd.concat([genecovdf[['Gene','Type','Region','Mean','Covered']],svcovdf[['Gene','Type','Region','Mean','Covered']]])
 
 # get haplotect output
-#haplotectdf = pd.read_csv(haplotect,sep='\t')
-#haplotectdf = haplotectdf.iloc[:, :-2]
-#haplotectdf.fillna(0, inplace=True)
+haplotectdf = pd.read_csv(haplotect,sep='\t')
+haplotectdf = haplotectdf.iloc[:, :-2]
+haplotectdf.fillna(0, inplace=True)
 
-#haplotectlocidf = pd.read_csv(haplotectloci,sep='\t',skiprows=2)
-#haplotectlocidf = haplotectlocidf.iloc[:, :-1]
-
+haplotectlocidf = pd.read_csv(haplotectloci,sep='\t',skiprows=2)
+haplotectlocidf = haplotectlocidf.iloc[:, :-1]
 
 #########################################
 #
-# Get variants
+# Get small variants
 #
 #########################################
 
@@ -330,7 +326,11 @@ for variant in vcf:
  
     abundance = round(variant.format('AF')[0][0] * 100,2)
 
-    if abundance < caseinfo['minvaf'] or variant.format('AD')[0][1] < minreads and varfilter=='PASS':
+    # dont even show variants below this VAF (%)
+    if abundance < excludevaf:
+        continue
+
+    if abundance < caseinfo['minvaf'] or variant.format('AD')[0][1] < caseinfo['minreads'] and varfilter=='PASS':
         varfilter = 'LowReads'
         
     gt = [variant.REF] + variant.ALT
@@ -391,6 +391,28 @@ for variant in vcf:
 
             variants = pd.concat([variants,pd.DataFrame([dict(zip(variants.columns,[cat,vartype,varfilter,str(variant.CHROM),str(variant.POS),variant.REF,variant.ALT[0],gene,transcript,consequence,csyntax,psyntax,exon,str(popmaf) + '%',customannotation,str(variant.format("DP")[0][0]),str(variant.format("AD")[0][1]),str(abundance)+"%"]))])])
 
+
+#
+# Get CNVs
+#
+
+cnv = pd.read_csv(cnvsegoutput,delimiter='\t')
+cnvcalls = pd.concat([cnv[cnv['Segment_Name'].isin(qcranges['CNVTARGETS']['loss'])],cnv[cnv['Segment_Name'].isin(qcranges['CNVTARGETS']['gain'])]])
+
+# add filter if the call is the wrong direction of what is clinically actionable
+def testinrange(row,loss,gain):
+    if row['Segment_Call']!='0' and ((row['Segment_Name'] in loss and row['Segment_Call']!='-') or (row['Segment_Name'] in gain and row['Segment_Call']!='+')):
+        return ';'.join([row['Filter'],'WrongSign'])
+    else:
+        return row['Filter']
+
+cnvcalls['Filter'] = cnvcalls.apply(lambda r: testinrange(r,qcranges['CNVTARGETS']['loss'],qcranges['CNVTARGETS']['gain']), axis=1)
+cnvcalls['type'] = ''
+cnvcalls.loc[cnvcalls['Segment_Call']=='-','type'] = 'LOSS'
+cnvcalls.loc[cnvcalls['Segment_Call']=='+','type'] = 'GAIN'
+cnvcalls.loc[cnvcalls['Segment_Call']=='0','type'] = 'REF'
+cnvcalls = cnvcalls[['type','Segment_Name','Chromosome','Start','End','Segment_Mean','Qual','Filter','Copy_Number','Ploidy']].copy()
+cnvcalls.rename(columns={'Segment_Name':'gene','Chromosome':'chrom','Start':'start','End':'end','Segment_Mean':'copy_ratio','Qual':'qual','Filter':'filter','Copy_Number':'copynumber','Ploidy':'ploidy'},inplace=True)
 print("Starting report...",file=sys.stderr)
     
 #
@@ -398,7 +420,7 @@ print("Starting report...",file=sys.stderr)
 #
 
 # make dict for report and redirect output for text report
-jsonout = {'CASEINFO':{},'VARIANTS':{},'QC':{}}
+jsonout = {'CASEINFO':{},'VARIANTS':{},'CNV':{},'QC':{}}
 
 f = open(caseinfo['name'] + ".report.txt", "w")
 sys.stdout = f
@@ -425,7 +447,7 @@ print()
 
 jsonout['CASEINFO'] = caseinfo
 
-print("*** REPORTABLE MUTATIONS ***\n")
+print("*** GENE MUTATIONS ***\n")
 
 if variants[variants['category']=='Tier1-3'].shape[0] > 0:
     print(variants[variants['category']=='Tier1-3'].iloc[:,1:].to_csv(sep='\t',header=True, index=False))
@@ -434,7 +456,7 @@ if variants[variants['category']=='Tier1-3'].shape[0] > 0:
 else:
     print("None Detected\n")
 
-print("*** FILTERED MUTATIONS ***\n")
+print("*** FILTERED GENE MUTATIONS ***\n")
 
 if variants[variants['category']=='Filtered'].shape[0] > 0:
     print(variants[variants['category']=='Filtered'].iloc[:,1:].to_csv(sep='\t',header=True, index=False))
@@ -443,12 +465,21 @@ if variants[variants['category']=='Filtered'].shape[0] > 0:
 else:
     print("None Detected\n")
 
-print("*** SNPS ***\n")
+print("*** COPY NUMBER VARIANTS ***\n")
 
-if variants[variants['category']=='SNPS'].shape[0] > 0:
-    print(variants[variants['category']=='SNPS'].iloc[:,1:].to_csv(sep='\t',header=True, index=False))
-    jsonout['VARIANTS']['SNPS'] = variants[variants['category']=='SNPS'].iloc[:,1:].to_dict('split')
-    del jsonout['VARIANTS']['SNPS']['index']
+if cnvcalls.shape[0] > 0:
+    print(cnvcalls[cnvcalls['filter']=='PASS'].to_csv(sep='\t',header=True, index=False))
+    jsonout['CNV']['PASS'] = cnvcalls[cnvcalls['filter']=='PASS'].to_dict('split')
+    del jsonout['CNV']['PASS']['index']
+else:
+    print("None Detected\n")
+
+print("*** FILTERED COPY NUMBER VARIANTS ***\n")
+
+if cnvcalls.shape[0] > 0:
+    print(cnvcalls[cnvcalls['filter']!='PASS'].to_csv(sep='\t',header=True, index=False))
+    jsonout['CNV']['Filtered'] = cnvcalls[cnvcalls['filter']!='PASS'].to_dict('split')
+    del jsonout['CNV']['Filtered']['index']
 else:
     print("None Detected\n")
 
@@ -497,15 +528,15 @@ jsonout['QC']['FUSION COVERAGE QC'] = xdf.to_dict('split')
 jsonout['QC']['FUSION COVERAGE QC'].pop('index', None)
 
 
-#print("*** Haplotect Contamination Estimate ***\n")
+print("*** Haplotect Contamination Estimate ***\n")
 
-#print(haplotectdf.iloc[:,1:].to_csv(sep='\t',header=True, index=False))
-#print(haplotectlocidf.to_csv(sep='\t',header=True, index=False))
+print(haplotectdf.iloc[:,1:].to_csv(sep='\t',header=True, index=False))
+print(haplotectlocidf.to_csv(sep='\t',header=True, index=False))
 
-#jsonout['QC']['HAPLOTECT SUMMARY'] = haplotectdf.iloc[:,1:].to_dict('split')
-#jsonout['QC']['HAPLOTECT SUMMARY'].pop('index', None)
-#jsonout['QC']['HAPLOTECT LOCI'] = haplotectlocidf.iloc[:,1:].to_dict('split')
-#jsonout['QC']['HAPLOTECT LOCI'].pop('index', None)
+jsonout['QC']['HAPLOTECT SUMMARY'] = haplotectdf.iloc[:,1:].to_dict('split')
+jsonout['QC']['HAPLOTECT SUMMARY'].pop('index', None)
+jsonout['QC']['HAPLOTECT LOCI'] = haplotectlocidf.iloc[:,1:].to_dict('split')
+jsonout['QC']['HAPLOTECT LOCI'].pop('index', None)
 
 print("*** GatewaySeq Assay Version " + str(qcranges["ASSAY VERSION"]) + " ***\n")
 
