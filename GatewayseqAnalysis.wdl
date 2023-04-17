@@ -11,7 +11,7 @@ workflow GatewayseqAnalysis {
         
         String refFasta 
         String ReferenceDict
-        String Vepcache
+        String Vepcache        
 
         String QcMetrics
         String CoverageBed
@@ -25,6 +25,8 @@ workflow GatewayseqAnalysis {
         String JobGroup 
     }
 
+    Int MinSVReads = 10
+    
     call run_civic {
         input: CivicCachePath=CivicCachePath,
                Vcf=DragenVcf,
@@ -47,6 +49,7 @@ workflow GatewayseqAnalysis {
         input: Vcf=DragenSVVCF,
                Bed=CoverageBed,
                Name=Name,
+               MinReads=MinSVReads,
                queue=Queue,
                jobGroup=JobGroup
     }
@@ -163,7 +166,7 @@ task filter_sv {
         String Vcf
         String Name
         String Bed
-        Int MinReads = 10
+        Int MinReads
     
         String jobGroup
         String queue
@@ -173,7 +176,7 @@ task filter_sv {
     command {
         grep Fusion ${Bed} > sv_region.bed && \
         bcftools view -i 'SVTYPE=="BND" && FMT/SR[0:1]>=${MinReads}' -R sv_region.bed -Oz -o ${Name}.sv.filtered.vcf.gz $Vcf && \
-        tabix -p vcf $NAME".sv.filtered.vcf.gz"
+        tabix -p vcf $Name".sv.filtered.vcf.gz"
     }
 
     runtime {
@@ -206,8 +209,8 @@ task annotate_sv {
     }
 
     command {
-        /usr/bin/perl -I /opt/vep/lib/perl/VEP/Plugins /opt/vep/src/ensembl-vep/vep --format vcf --vcf --fasta $refFasta \
-        --per_gene --symbol --term SO -o ${Name}.sv.annotated.vcf -i ${Vcf} --offline --cache --dir $Vepcache && \
+        /usr/bin/perl -I /opt/vep/lib/perl/VEP/Plugins /opt/vep/src/ensembl-vep/vep --format vcf --vcf --fasta ${refFasta} \
+        --per_gene --symbol --term SO -o ${Name}.sv.annotated.vcf -i ${Vcf} --offline --cache --dir ${Vepcache} && \
         /usr/local/bin/bgzip ${Name}.sv.annotated.vcf && /usr/local/bin/tabix -p vcf ${Name}.sv.annotated.vcf.gz
     }
 
