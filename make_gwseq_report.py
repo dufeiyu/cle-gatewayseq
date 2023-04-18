@@ -66,6 +66,13 @@ def check_qc_reference_ranges(value, minimum, maximum, unit):
         sys.exit("Reference range must have minimum and or maximum")
     return range_str
 
+# add filter if the call is the wrong direction of what is clinically actionable
+def testinrange(row,loss,gain):
+    if row['Segment_Call']!='0' and ((row['Segment_Name'] in loss and row['Segment_Call']!='-') or (row['Segment_Name'] in gain and row['Segment_Call']!='+')):
+        return ';'.join([row['Filter'],'WrongSign'])
+    else:
+        return row['Filter']
+
 #
 # Script
 #
@@ -150,8 +157,10 @@ umimetrics = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.umi_
 genetargetbed = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.target_bed_read_cov_report.bed'))[0]
 svtargetbed = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.qc-coverage-region-1_read_cov_report.bed'))[0]
 coveragebed = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.qc-coverage-region-1_full_res.bed'))[0]
+MSIjson = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.microsat_output.json'))[0]
+TMBcsv = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.tmb.metrics.csv'))[0]
 
-if not mappingmetrics.is_file() or not targetmetrics.is_file() or not umimetrics.is_file() or not genetargetbed.is_file() or not svtargetbed.is_file() or not coveragebed.is_file():
+if not mappingmetrics.is_file() or not targetmetrics.is_file() or not umimetrics.is_file() or not genetargetbed.is_file() or not svtargetbed.is_file() or not coveragebed.is_file() or not MSIjson.is_file() or not TMBcsv.is_file():
     sys.exit("DRAGEN metrics files not found.")
 
 #########################################
@@ -399,12 +408,6 @@ for variant in vcf:
 cnv = pd.read_csv(cnvsegoutput,delimiter='\t')
 cnvcalls = pd.concat([cnv[cnv['Segment_Name'].isin(qcranges['CNVTARGETS']['loss'])],cnv[cnv['Segment_Name'].isin(qcranges['CNVTARGETS']['gain'])]])
 
-# add filter if the call is the wrong direction of what is clinically actionable
-def testinrange(row,loss,gain):
-    if row['Segment_Call']!='0' and ((row['Segment_Name'] in loss and row['Segment_Call']!='-') or (row['Segment_Name'] in gain and row['Segment_Call']!='+')):
-        return ';'.join([row['Filter'],'WrongSign'])
-    else:
-        return row['Filter']
 
 cnvcalls['Filter'] = cnvcalls.apply(lambda r: testinrange(r,qcranges['CNVTARGETS']['loss'],qcranges['CNVTARGETS']['gain']), axis=1)
 cnvcalls['type'] = ''
@@ -420,7 +423,7 @@ print("Starting report...",file=sys.stderr)
 #
 
 # make dict for report and redirect output for text report
-jsonout = {'CASEINFO':{},'VARIANTS':{},'CNV':{},'QC':{}}
+jsonout = {'CASEINFO':{},'VARIANTS':{},'CNV':{},'QC':{},'MSI':{},'TMB':{}}
 
 f = open(caseinfo['name'] + ".report.txt", "w")
 sys.stdout = f
@@ -482,6 +485,31 @@ if cnvcalls.shape[0] > 0:
     del jsonout['CNV']['Filtered']['index']
 else:
     print("None Detected\n")
+
+print("*** MSI ***\n")
+with open(MSIjson) as msi_json:
+    MSI_json = json.load(msi_json)
+msi_json.close()
+print("PercentageUnstableSites: " + MSI_json["PercentageUnstableSites"])
+print("ResultIsValid: " + MSI_json["ResultIsValid"])
+print("SumDistance: " + MSI_json["SumDistance"])
+jsonout['MSI']['PercentageUnstableSites'] = MSI_json['PercentageUnstableSites']
+jsonout['MSI']['ResultIsValid'] = MSI_json['ResultIsValid']
+jsonout['MSI']['SumDistance'] = MSI_json['SumDistance']
+
+print("\n*** TMB ***\n")
+with open(TMBcsv, 'r') as tmb_csv:
+    tmb_reader = csv.reader(tmb_csv, delimiter=',')
+    for tmb_line in tmb_reader:
+        if tmb_line[2] == 'TMB':
+            TMB = tmb_line[3]
+        if tmb_line[2] == 'Nonsyn TMB':
+            NS_TMB = tmb_line[3]
+tmb_csv.close()
+print('TMB: '+ TMB)
+print('Nonsyn TMB: ' + NS_TMB)
+jsonout['TMB']['TMB'] = TMB
+jsonout['TMB']['Nonsyn TMB'] = NS_TMB
 
 print("\n*** SEQUENCING QC ***\n")
 

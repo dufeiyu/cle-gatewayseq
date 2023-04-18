@@ -7,7 +7,8 @@ workflow GatewayseqAnalysis {
         String DragenCramIndex
         String DragenVcf
         String DragenVcfIndex
-        String DragenSVVCF
+        String DragenSvVcf
+        String DragenSvVcfIndex
         
         String refFasta 
         String ReferenceDict
@@ -26,7 +27,7 @@ workflow GatewayseqAnalysis {
     }
 
     Int MinSVReads = 10
-    
+
     call run_civic {
         input: CivicCachePath=CivicCachePath,
                Vcf=DragenVcf,
@@ -46,7 +47,8 @@ workflow GatewayseqAnalysis {
     }
 
     call filter_sv {
-        input: Vcf=DragenSVVCF,
+        input: Vcf=DragenSvVcf,
+               VcfIndex=DragenSvVcfIndex,
                Name=Name,
                MinReads=MinSVReads,
                queue=Queue,
@@ -62,7 +64,6 @@ workflow GatewayseqAnalysis {
                jobGroup=JobGroup
     }
 
-
     call run_haplotect {
         input: refFasta=refFasta,
                refDict=ReferenceDict,
@@ -77,7 +78,8 @@ workflow GatewayseqAnalysis {
     call gather_files {
         input: OutputFiles=[run_haplotect.out_file,
                run_haplotect.sites_file,
-               run_vep.vcf,run_vep.index,
+               run_vep.vcf,
+               run_vep.index,
                annotate_sv.vcf,
                annotate_sv.index],
                OutputDir=OutputDir,
@@ -161,19 +163,18 @@ task run_vep {
 
 task filter_sv {
     input { 
-            
-        String Vcf
+        File Vcf
+        File VcfIndex
         String Name
         Int MinReads
-    
+
         String jobGroup
         String queue
-    
     }
 
     command {
-        bcftools view -i 'SVTYPE=="BND" && FMT/SR[0:1]>=${MinReads}' -Oz -o ${Name}.sv.filtered.vcf.gz $Vcf && \
-        tabix -p vcf $Name".sv.filtered.vcf.gz"
+        bcftools view -i 'SVTYPE=="BND" && FMT/SR[0:1]>=${MinReads}' -Oz -o ${Name}.sv.filtered.vcf.gz ${Vcf} && \
+        tabix -p vcf ${Name}.sv.filtered.vcf.gz
     }
 
     runtime {
@@ -187,22 +188,19 @@ task filter_sv {
      output {
         File vcf = "${Name}.sv.filtered.vcf.gz"
         File index = "${Name}.sv.filtered.vcf.gz.tbi"
-
      }
 }
 
 task annotate_sv {
     input { 
-            
         String Vcf
         String Name
-    
+
         String refFasta
         String Vepcache
-    
+
         String jobGroup
         String queue
-    
     }
 
     command {
@@ -222,10 +220,8 @@ task annotate_sv {
      output {
         File vcf = "${Name}.sv.annotated.vcf.gz"
         File index = "${Name}.sv.annotated.vcf.gz.tbi"
-
      }
 }
-
 
 task run_haplotect {
      input {
