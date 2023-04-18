@@ -9,10 +9,10 @@ workflow GatewayseqAnalysis {
         String DragenVcfIndex
         String DragenSvVcf
         String DragenSvVcfIndex
-        
+
         String refFasta 
         String ReferenceDict
-        String Vepcache        
+        String Vepcache
 
         String QcMetrics
         String CoverageBed
@@ -155,8 +155,8 @@ task run_vep {
          job_group: jobGroup
      }
      output {
-        File vcf = "${Name}.annotated.vcf.gz"
-        File index = "${Name}.annotated.vcf.gz.tbi"
+         File vcf = "${Name}.annotated.vcf.gz"
+         File index = "${Name}.annotated.vcf.gz.tbi"
 
      }
 }
@@ -178,16 +178,16 @@ task filter_sv {
     }
 
     runtime {
-         docker_image: "docker1(ghcr.io/dhslab/docker-baseimage:latest)"
-         cpu: "1"
-         memory: "10 G"
-         queue: queue
-         job_group: jobGroup
-     }
+        docker_image: "docker1(ghcr.io/dhslab/docker-baseimage:latest)"
+        cpu: "1"
+        memory: "10 G"
+        queue: queue
+        job_group: jobGroup
+    }
 
      output {
-        File vcf = "${Name}.sv.filtered.vcf.gz"
-        File index = "${Name}.sv.filtered.vcf.gz.tbi"
+         File vcf = "${Name}.sv.filtered.vcf.gz"
+         File index = "${Name}.sv.filtered.vcf.gz.tbi"
      }
 }
 
@@ -205,22 +205,22 @@ task annotate_sv {
 
     command {
         /usr/bin/perl -I /opt/vep/lib/perl/VEP/Plugins /opt/vep/src/ensembl-vep/vep --format vcf --vcf --fasta ${refFasta} \
-        --per_gene --symbol --term SO -o ${Name}.sv.annotated.vcf -i ${Vcf} --offline --cache --dir ${Vepcache} && \
-        /usr/local/bin/bgzip ${Name}.sv.annotated.vcf && /usr/local/bin/tabix -p vcf ${Name}.sv.annotated.vcf.gz
+        --per_gene --symbol --term SO -o ${Name}.sv_annotated.vcf -i ${Vcf} --offline --cache --dir ${Vepcache} && \
+        /usr/local/bin/bgzip ${Name}.sv_annotated.vcf && /usr/local/bin/tabix -p vcf ${Name}.sv_annotated.vcf.gz
     }
 
     runtime {
-         docker_image: "docker1(registry.gsc.wustl.edu/mgi-cle/vep105-htslib1.9:1)"
-         cpu: "1"
-         memory: "10 G"
-         queue: queue
-         job_group: jobGroup
-     }
+        docker_image: "docker1(registry.gsc.wustl.edu/mgi-cle/vep105-htslib1.9:1)"
+        cpu: "1"
+        memory: "10 G"
+        queue: queue
+        job_group: jobGroup
+    }
 
-     output {
-        File vcf = "${Name}.sv.annotated.vcf.gz"
-        File index = "${Name}.sv.annotated.vcf.gz.tbi"
-     }
+    output {
+        File vcf = "${Name}.sv_annotated.vcf.gz"
+        File index = "${Name}.sv_annotated.vcf.gz.tbi"
+    }
 }
 
 task run_haplotect {
