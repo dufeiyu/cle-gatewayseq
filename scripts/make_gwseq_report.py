@@ -149,7 +149,8 @@ vcffile = list(Path(caseinfo['casedir']).rglob('*.annotated.vcf.gz'))[0]
 if not vcffile.is_file():
     sys.exit("VCF file " + str(vcffile) + " not valid.")
 
-svvcffile = list(Path("/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/hackathon/svs/").rglob('*-Gateway-Seq-S15-27904-lib1.sv.annotated2.vcf.gz'))[0] #list(Path(caseinfo['casedir']).rglob('*.sv_annotated.vcf.gz'))[0]
+#svvcffile = list(Path("/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/hackathon/svs/").rglob('*-Gateway-Seq-S15-27904-lib1.sv.annotated2.vcf.gz'))[0] #list(Path(caseinfo['casedir']).rglob('*.sv_annotated.vcf.gz'))[0]
+svvcffile = list(Path(caseinfo['casedir']).rglob('*.sv_annotated.vcf.gz'))[0]
 if not svvcffile.is_file():
     sys.exit("SV VCF file " + str(svvcffile) + " not valid.")
 
