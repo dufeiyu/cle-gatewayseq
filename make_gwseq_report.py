@@ -128,7 +128,7 @@ with open(caseinfo['qcrange_file'], 'r') as json_file:
     qcranges = json.load(json_file)
 
 minFractionCovered = float(qcranges['Target fraction at coverage'].split(',')[0])
-minTargetCoverage = float(qcranges['Minimum target coverage'].split(',')[0])
+minTargetCoverage = [ int(x) for x in qcranges['Minimum target coverage'].split(',') ]
 minCoverage = float(qcranges['COVERAGE SUMMARY: Average alignment coverage over target region'].split(',')[0])
 
 
@@ -173,7 +173,7 @@ if not mappingmetrics.is_file() or not targetmetrics.is_file() or not umimetrics
 qcdf = pd.DataFrame(columns=['metric','value'])
 
 # this is for exon/gene coverage metrics
-covqcdf = pd.DataFrame(columns=['Gene','Type','Region','Mean','Covered'])
+covqcdf = pd.DataFrame(columns=['Gene','Type','Region','Mean','Covered1','Covered2'])
 
 # dataframe with all variants
 variants = pd.DataFrame(columns=['category','type','filter','chrom','pos','ref','alt','gene','transcript','consequence','csyntax','psyntax','exon','popaf','annotations','coverage','altreads','vaf'])
@@ -249,6 +249,12 @@ qcdf = pd.concat([qcdf,dfpct])
 # get coverage file
 fullResCovPr = pr.PyRanges(pd.read_csv(coveragebed, header=None, names="Chromosome Start End Coverage".split(), sep="\t"))
 
+ntAtCovlevel1 = sum(fullResCovPr[fullResCovPr.Coverage>minTargetCoverage[0]].lengths())
+ntAtCovlevel2 = sum(fullResCovPr[fullResCovPr.Coverage>minTargetCoverage[1]].lengths())
+
+qcdf.loc[len(qcdf.index)] = ['COVERAGE SUMMARY: Percent of target at ' + str(minTargetCoverage[0]) + 'x', ntAtCovlevel1, ntAtCovlevel1/sum(fullResCovPr.lengths())*100]
+qcdf.loc[len(qcdf.index)] = ['COVERAGE SUMMARY: Percent of target at ' + str(minTargetCoverage[1]) + 'x', ntAtCovlevel2, ntAtCovlevel2/sum(fullResCovPr.lengths())*100]
+
 # get gene coverage info
 
 # intersect full res coverage bedfile w/ coverage QC bed file to calculate coverage
@@ -262,8 +268,11 @@ genecovdf = df[df.Region.str.contains(r'GOAL_genes',na=False)].groupby('Gene')[[
 genecovdf['Type'] = 'Gene'
 genecovdf['Region'] = genecovdf['Gene']
 genecovdf['Mean'] = genecovdf.apply(lambda v: v['tcov']/v['nt'],axis=1)
-genecovdf = pd.merge(genecovdf,df[df.Region.str.contains(r'GOAL_genes',na=False) & (df.Coverage>=minTargetCoverage)].groupby('Gene')[['nt']].sum().reset_index().rename(columns={'nt':'Covered','Gene':'Region'}),on='Region')
-genecovdf['Covered'] = genecovdf.Covered/genecovdf.nt*100
+genecovdf = pd.merge(genecovdf,df[df.Region.str.contains(r'GOAL_genes',na=False) & (df.Coverage>=minTargetCoverage[0])].groupby('Gene')[['nt']].sum().reset_index().rename(columns={'nt':'Covered1','Gene':'Region'}),on='Region')
+genecovdf = pd.merge(genecovdf,df[df.Region.str.contains(r'GOAL_genes',na=False) & (df.Coverage>=minTargetCoverage[1])].groupby('Gene')[['nt']].sum().reset_index().rename(columns={'nt':'Covered2','Gene':'Region'}),on='Region')
+genecovdf['Covered1'] = genecovdf.Covered1/genecovdf.nt*100
+genecovdf['Covered2'] = genecovdf.Covered2/genecovdf.nt*100
+
 
 # mean MSI loci coverage and fraction of targets at minTargetCov or higher 
 #othercovdf = df[df.Region.str.contains(r'_MSI|haplotect',na=False)].groupby(['Chromosome','Start','End'])[['nt','tcov']].sum().reset_index()
@@ -288,10 +297,12 @@ svcovdf = df[df.Region.str.contains(r'GOAL_rearrangements',na=False)].groupby('G
 svcovdf['Type'] = 'Fusion'
 svcovdf['Region'] = svcovdf['Gene']
 svcovdf['Mean'] = svcovdf.apply(lambda v: v['tcov']/v['nt'],axis=1)
-svcovdf = pd.merge(svcovdf,df[df.Region.str.contains(r'GOAL_rearrangements',na=False) & (df.Coverage>=minTargetCoverage)].groupby('Gene')[['nt']].sum().reset_index().rename(columns={'nt':'Covered','Gene':'Region'}),on='Region')
-svcovdf['Covered'] = svcovdf.Covered/svcovdf.nt*100
+svcovdf = pd.merge(svcovdf,df[df.Region.str.contains(r'GOAL_rearrangements',na=False) & (df.Coverage>=minTargetCoverage[0])].groupby('Gene')[['nt']].sum().reset_index().rename(columns={'nt':'Covered1','Gene':'Region'}),on='Region')
+svcovdf = pd.merge(svcovdf,df[df.Region.str.contains(r'GOAL_rearrangements',na=False) & (df.Coverage>=minTargetCoverage[1])].groupby('Gene')[['nt']].sum().reset_index().rename(columns={'nt':'Covered2','Gene':'Region'}),on='Region')
+svcovdf['Covered1'] = svcovdf.Covered1/svcovdf.nt*100
+svcovdf['Covered2'] = svcovdf.Covered2/svcovdf.nt*100
 
-covqcdf = pd.concat([genecovdf[['Gene','Type','Region','Mean','Covered']],svcovdf[['Gene','Type','Region','Mean','Covered']]])
+covqcdf = pd.concat([genecovdf[['Gene','Type','Region','Mean','Covered1','Covered2']],svcovdf[['Gene','Type','Region','Mean','Covered1','Covered2']]])
 
 # get haplotect output
 haplotectdf = pd.read_csv(haplotect,sep='\t')
@@ -537,9 +548,9 @@ print()
 
 print("*** GENE COVERAGE QC ***\n")
 
-xdf = covqcdf[(covqcdf.Type == "Gene")][['Gene','Mean','Covered']]
-xdf['QC'] = np.where((xdf['Mean'] < minCoverage) | (xdf['Covered']<minFractionCovered), '(!)', '')
-xdf.rename(columns={'Covered':'%CoveredAt'+str(int(minTargetCoverage))+'x'},inplace=True)
+xdf = covqcdf[(covqcdf.Type == "Gene")][['Gene','Mean','Covered1','Covered2']]
+xdf['QC'] = np.where((xdf['Mean'] < minCoverage) | (xdf['Covered1']<minFractionCovered), '(!)', '')
+xdf.rename(columns={'Covered1':'%CoveredAt'+str(int(minTargetCoverage[0]))+'x','Covered2':'%CoveredAt'+str(int(minTargetCoverage[1]))+'x'},inplace=True)
 print(xdf.to_csv(sep='\t',header=True, index=False,float_format='%.1f'))
 
 jsonout['QC']['GENE COVERAGE QC'] = xdf.to_dict('split')
@@ -547,9 +558,9 @@ jsonout['QC']['GENE COVERAGE QC'].pop('index', None)
 
 print("*** FUSION COVERAGE QC ***\n")
 
-xdf = covqcdf[(covqcdf.Type == "Fusion")][['Gene','Mean','Covered']]
-xdf['QC'] = np.where((xdf['Mean'] < minCoverage) | (xdf['Covered']<minFractionCovered), '(!)', '')
-xdf.rename(columns={'Covered':'%CoveredAt'+str(int(minTargetCoverage))+'x'},inplace=True)
+xdf = covqcdf[(covqcdf.Type == "Fusion")][['Gene','Mean','Covered1','Covered2']]
+xdf['QC'] = np.where((xdf['Mean'] < minCoverage) | (xdf['Covered1']<minFractionCovered), '(!)', '')
+xdf.rename(columns={'Covered1':'%CoveredAt'+str(int(minTargetCoverage[0]))+'x','Covered2':'%CoveredAt'+str(int(minTargetCoverage[1]))+'x'},inplace=True)
 print(xdf.to_csv(sep='\t',header=True, index=False,float_format='%.1f'))
 
 jsonout['QC']['FUSION COVERAGE QC'] = xdf.to_dict('split')
