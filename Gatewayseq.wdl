@@ -114,6 +114,8 @@ workflow Gatewayseq {
                    QcMetrics=QcMetrics,
                    DragenVcf=dragen_align.vcf,
                    DragenVcfIndex=dragen_align.index,
+                   DragenSvVcf=dragen_align.svvcf,
+                   DragenSvVcfIndex=dragen_align.svindex,
                    DragenCram=dragen_align.cram,
                    DragenCramIndex=dragen_align.crai,
                    OutputDir=OutputDir,
@@ -315,6 +317,8 @@ task dragen_align {
          File crai = "${dragen_outdir}/${Name}_tumor.cram.crai"
          File vcf = "${dragen_outdir}/${Name}.hard-filtered.vcf.gz"
          File index = "${dragen_outdir}/${Name}.hard-filtered.vcf.gz.tbi"
+         File svvcf = "${dragen_outdir}/${Name}.sv.vcf.gz"
+         File svindex = "${dragen_outdir}/${Name}.sv.vcf.gz.tbi"
      }
 }
 
