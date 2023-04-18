@@ -33,6 +33,7 @@ my $git_dir = '/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-ga
 
 my $conf = File::Spec->join($git_dir, 'application.conf');
 my $wdl  = File::Spec->join($git_dir, 'Gatewayseq.wdl');
+my $zip  = File::Spec->join($git_dir, 'imports.zip');
 my $json_template = File::Spec->join($git_dir, 'Gatewayseq.json');
 
 my $group  = '/cle/wdl/haloplex';
@@ -158,10 +159,10 @@ $json_fh->close;
 my $out_log = File::Spec->join($out_dir, 'out.log');
 my $err_log = File::Spec->join($out_dir, 'err.log');
 
-my $cmd = "bsub -g $group -G $user_group -oo $out_log -eo $err_log -q $queue -a \"docker($docker)\" /usr/bin/java -Dconfig.file=$conf -jar /opt/cromwell.jar run -t wdl -i $input_json $wdl";
+my $cmd = "bsub -g $group -G $user_group -oo $out_log -eo $err_log -q $queue -R \"select[mem>16000] rusage[mem=16000]\" -M 16000000 -a \"docker($docker)\" /usr/bin/java -Dconfig.file=$conf -jar /opt/cromwell.jar run -t wdl --imports $zip -i $input_json $wdl";
 
-#system $cmd;
-print $cmd."\n";
+system $cmd;
+#print $cmd."\n";
 
 sub rev_comp {
     my $index = shift;
