@@ -42,7 +42,7 @@ workflow Gatewayseq {
     String MSIMicroSatFile = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/microsatellite_file.hg38-1.gws"
     String MSIRefNormalDir = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/test/MSI/normal_ref_dir"
 
-    String QC_pl = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/QC_metrics.pl"
+    String QC_pl = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/scripts/QC_metrics.pl"
     String DemuxFastqDir = "/storage1/fs1/gtac-mgi/Active/CLE/assay/gatewayseq/demux_fastq"
 
 

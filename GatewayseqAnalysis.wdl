@@ -297,7 +297,7 @@ task make_report {
      String SampleOutDir = OutputDir + "/" + SubDir
 
      command {
-         /usr/bin/python3 /storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/make_gwseq_report.py -n ${Name} -d ${SampleOutDir} -q ${QcMetrics} && \
+         /usr/bin/python3 /storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/scripts/make_gwseq_report.py -n ${Name} -d ${SampleOutDir} -q ${QcMetrics} && \
          /bin/mv ./*.report.txt ./*.report.json ${SampleOutDir}
      }
      runtime {
