@@ -6,6 +6,8 @@
     "GatewayseqAnalysis.DragenCramIndex":"",
     "GatewayseqAnalysis.DragenVcf":"",
     "GatewayseqAnalysis.DragenVcfIndex":"",
+    "GatewayseqAnalysis.DragenSvVcf":"",
+    "GatewayseqAnalysis.DragenSvVcfIndex":"",
     "GatewayseqAnalysis.refFasta":"/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.fa",
     "GatewayseqAnalysis.ReferenceDict":"/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.dict",
     "GatewayseqAnalysis.Vepcache":"/storage1/fs1/gtac-mgi/Active/CLE/reference/VEP_cache",
