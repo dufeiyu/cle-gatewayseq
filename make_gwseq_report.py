@@ -252,8 +252,8 @@ fullResCovPr = pr.PyRanges(pd.read_csv(coveragebed, header=None, names="Chromoso
 ntAtCovlevel1 = sum(fullResCovPr[fullResCovPr.Coverage>minTargetCoverage[0]].lengths())
 ntAtCovlevel2 = sum(fullResCovPr[fullResCovPr.Coverage>minTargetCoverage[1]].lengths())
 
-qcdf.loc[len(qcdf.index)] = ['COVERAGE SUMMARY: Percent of target at ' + str(minTargetCoverage[0]) + 'x', ntAtCovlevel1, ntAtCovlevel1/sum(fullResCovPr.lengths())*100]
-qcdf.loc[len(qcdf.index)] = ['COVERAGE SUMMARY: Percent of target at ' + str(minTargetCoverage[1]) + 'x', ntAtCovlevel2, ntAtCovlevel2/sum(fullResCovPr.lengths())*100]
+qcdf.loc[len(qcdf.index)] = ['COVERAGE SUMMARY: Target at ' + str(minTargetCoverage[0]) + 'x (%)', ntAtCovlevel1/sum(fullResCovPr.lengths())*100, '']
+qcdf.loc[len(qcdf.index)] = ['COVERAGE SUMMARY: Target at ' + str(minTargetCoverage[1]) + 'x (%)', ntAtCovlevel2/sum(fullResCovPr.lengths())*100, '']
 
 # get gene coverage info
 
