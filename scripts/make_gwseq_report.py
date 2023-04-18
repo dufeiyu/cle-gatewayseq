@@ -8,6 +8,11 @@ from time import gmtime, strftime
 from cyvcf2 import VCF
 from pathlib import Path
 
+def revcomp(dna):
+    complement = {"A": "T", "T": "A", "C": "G", "G": "C"}  # DNA complement pairs
+    reverse_complement = "".join(complement.get(base, base) for base in reversed(dna))
+    return reverse_complement
+
 def pos2codon(exonstart,exonend,cpos,pos,strand):
     if pos<=exonend and pos>=exonstart:
         if strand == '+':
@@ -80,6 +85,7 @@ def testinrange(row,loss,gain):
 parser = argparse.ArgumentParser(description='Make GatewaySeq report')
 parser.add_argument('-n','--name',required=True,help='Sample name')
 parser.add_argument('-d','--dir',required=True,help='Output directory')
+parser.add_argument('-l','--fusionlist',required=True,help='Gene pairs to report for fusions')
 parser.add_argument('-q','--qcrangejsonfile',required=True,help='QCReferenceRanges.json')
 parser.add_argument('-m','--mrn',default='NONE',help='Sample MRN number')
 parser.add_argument('-a','--accession',default='NONE',help='Sample accession number')
@@ -107,6 +113,7 @@ caseinfo['run_info_str'] = args.runinfostr
 caseinfo['qcrange_file'] = args.qcrangejsonfile
 caseinfo['minvaf'] = float(args.minvaf)
 caseinfo['minreads'] = float(args.minreads)
+caseinfo['genefusions'] = args.fusionlist
 
 excludevaf = float(args.excludevaf)
 
@@ -114,8 +121,6 @@ if caseinfo['specimen'] == 'BM':
     caseinfo['specimen'] = 'Bone Marrow'
 elif caseinfo['specimen'] == 'PB':
     caseinfo['specimen'] = 'Peripheral Blood'
-
-nonSynon = ['splice_acceptor_variant','splice_donor_variant','stop_gained','frameshift_variant','stop_lost','start_lost','transcript_amplification','inframe_insertion','inframe_deletion','missense_variant','protein_altering_variant']
 
 #########################################
 #
@@ -131,6 +136,8 @@ minFractionCovered = float(qcranges['Target fraction at coverage'].split(',')[0]
 minTargetCoverage = [ int(x) for x in qcranges['Minimum target coverage'].split(',') ]
 minCoverage = float(qcranges['COVERAGE SUMMARY: Average alignment coverage over target region'].split(',')[0])
 
+nonSynon = ['splice_acceptor_variant','splice_donor_variant','stop_gained','frameshift_variant','stop_lost','start_lost','transcript_amplification','inframe_insertion','inframe_deletion','missense_variant','protein_altering_variant']
+nonCodingList = qcranges['NONCODINGVARIANTLIST']
 
 #########################################
 #
@@ -141,6 +148,10 @@ minCoverage = float(qcranges['COVERAGE SUMMARY: Average alignment coverage over 
 vcffile = list(Path(caseinfo['casedir']).rglob('*.annotated.vcf.gz'))[0]
 if not vcffile.is_file():
     sys.exit("VCF file " + str(vcffile) + " not valid.")
+
+svvcffile = list(Path("/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/hackathon/svs/").rglob('*-Gateway-Seq-S15-27904-lib1.sv.annotated2.vcf.gz'))[0] #list(Path(caseinfo['casedir']).rglob('*.sv_annotated.vcf.gz'))[0]
+if not svvcffile.is_file():
+    sys.exit("SV VCF file " + str(svvcffile) + " not valid.")
 
 cnvsegoutput = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.seg.called.merged'))[0]
 if not cnvsegoutput.is_file():
@@ -155,12 +166,12 @@ mappingmetrics = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.
 targetmetrics = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.target_bed_coverage_metrics.csv'))[0]
 umimetrics = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.umi_metrics.csv'))[0]
 genetargetbed = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.target_bed_read_cov_report.bed'))[0]
-svtargetbed = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.qc-coverage-region-1_read_cov_report.bed'))[0]
+alltargetbed = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.qc-coverage-region-1_read_cov_report.bed'))[0]
 coveragebed = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.qc-coverage-region-1_full_res.bed'))[0]
 MSIjson = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.microsat_output.json'))[0]
 TMBcsv = list(Path(os.path.join(caseinfo['casedir'],"dragen")).rglob('*.tmb.metrics.csv'))[0]
 
-if not mappingmetrics.is_file() or not targetmetrics.is_file() or not umimetrics.is_file() or not genetargetbed.is_file() or not svtargetbed.is_file() or not coveragebed.is_file() or not MSIjson.is_file() or not TMBcsv.is_file():
+if not mappingmetrics.is_file() or not targetmetrics.is_file() or not umimetrics.is_file() or not genetargetbed.is_file() or not alltargetbed.is_file() or not coveragebed.is_file() or not MSIjson.is_file() or not TMBcsv.is_file():
     sys.exit("DRAGEN metrics files not found.")
 
 #########################################
@@ -273,36 +284,44 @@ genecovdf = pd.merge(genecovdf,df[df.Region.str.contains(r'GOAL_genes',na=False)
 genecovdf['Covered1'] = genecovdf.Covered1/genecovdf.nt*100
 genecovdf['Covered2'] = genecovdf.Covered2/genecovdf.nt*100
 
-
-# mean MSI loci coverage and fraction of targets at minTargetCov or higher 
-#othercovdf = df[df.Region.str.contains(r'_MSI|haplotect',na=False)].groupby(['Chromosome','Start','End'])[['nt','tcov']].sum().reset_index()
-#othercovdf['Type'] = 'Other'
-#othercovdf['Region'] = df[df.Region.str.contains(r'_MSI|haplotect',na=False)].Region.str.split('|',expand=True)[[0]]
-#othercovdf['Mean'] = othercovdf.apply(lambda v: v['tcov']/v['nt'],axis=1)
-#othercovdf = pd.merge(othercovdf,df[df.Region.str.contains(r'_MSI|haplotect',na=False) & (df.Coverage>=minTargetCoverage)].groupby('Gene')[['nt']].sum().reset_index().rename(columns={'nt':'Covered','Gene':'Region'}),on='Region')
-#othercovdf['Covered'] = othercovdf.Covered/genecovdf.nt*100
-
 # intersect full res coverage bedfile w/ coverage QC bed file to calculate coverage
-covBedPr = pr.PyRanges(pd.read_csv(svtargetbed, skiprows=1, header=None, names="Chromosome Start End Gene Region ReadCov R1Cov R2Cov".split(), sep="\t"))
+covBedPr = pr.PyRanges(pd.read_csv(alltargetbed, skiprows=1, header=None, names="Chromosome Start End Gene Region ReadCov R1Cov R2Cov".split(), sep="\t"))
 
 # note, this file has all the transcript IDs, so get those now
 transcripts = covBedPr.df.Region.str.split('|',expand=True)[[2]].replace('\s\+\s\S+','',regex=True).drop_duplicates()[2].tolist()
 
 df = covBedPr.join(fullResCovPr).df
+
+svgenes = df[df.Region.str.contains(r'GOAL_rearrangements',na=False)]['Gene'].drop_duplicates().tolist()
+
 df['nt'] = df[['End','End_b']].min(axis=1) - df[['Start','Start_b']].max(axis=1)
 df['tcov'] = df['nt'] * df['Coverage']
 
 # mean gene coverage and fraction of gene targets at minTargetCov or higher 
-svcovdf = df[df.Region.str.contains(r'GOAL_rearrangements',na=False)].groupby('Gene')[['nt','tcov']].sum().reset_index()
+df2 = df[df.Region.str.contains(r'GOAL_rearrangements',na=False)].copy()
+df2['Gene'] = df2['Gene'].str.extract(r'(\S+_Fusion)')
+svcovdf = df2.groupby('Gene')[['nt','tcov']].sum().reset_index()
 svcovdf['Type'] = 'Fusion'
 svcovdf['Region'] = svcovdf['Gene']
 svcovdf['Mean'] = svcovdf.apply(lambda v: v['tcov']/v['nt'],axis=1)
-svcovdf = pd.merge(svcovdf,df[df.Region.str.contains(r'GOAL_rearrangements',na=False) & (df.Coverage>=minTargetCoverage[0])].groupby('Gene')[['nt']].sum().reset_index().rename(columns={'nt':'Covered1','Gene':'Region'}),on='Region')
-svcovdf = pd.merge(svcovdf,df[df.Region.str.contains(r'GOAL_rearrangements',na=False) & (df.Coverage>=minTargetCoverage[1])].groupby('Gene')[['nt']].sum().reset_index().rename(columns={'nt':'Covered2','Gene':'Region'}),on='Region')
+svcovdf = pd.merge(svcovdf,df2[df2.Region.str.contains(r'GOAL_rearrangements',na=False) & (df2.Coverage>=minTargetCoverage[0])].groupby('Gene')[['nt']].sum().reset_index().rename(columns={'nt':'Covered1'}),on='Gene')
+svcovdf = pd.merge(svcovdf,df2[df2.Region.str.contains(r'GOAL_rearrangements',na=False) & (df2.Coverage>=minTargetCoverage[1])].groupby('Gene')[['nt']].sum().reset_index().rename(columns={'nt':'Covered2'}),on='Gene')
 svcovdf['Covered1'] = svcovdf.Covered1/svcovdf.nt*100
 svcovdf['Covered2'] = svcovdf.Covered2/svcovdf.nt*100
 
-covqcdf = pd.concat([genecovdf[['Gene','Type','Region','Mean','Covered1','Covered2']],svcovdf[['Gene','Type','Region','Mean','Covered1','Covered2']]])
+# mean MSI loci coverage and fraction of targets at minTargetCov or higher 
+othercovdf = df[df.Region.str.contains(r'_MSI|haplotect',na=False)].copy()
+othercovdf['Gene'] = 'MSI'
+othercovdf.loc[othercovdf.Region.str.contains(r'haplotect',na=False),'Gene'] = 'HAPLOTECT'
+x = pd.merge(othercovdf.groupby(['Gene'])[['nt','tcov']].sum().reset_index(),othercovdf[othercovdf.Coverage>=minTargetCoverage[0]].groupby(['Gene'])[['nt']].sum().reset_index().rename(columns={'nt':'Covered1'}),on=['Gene'])
+othercovdf = pd.merge(x,othercovdf[othercovdf.Coverage>=minTargetCoverage[1]].groupby(['Gene'])[['nt']].sum().reset_index().rename(columns={'nt':'Covered2'}),on=['Gene'])
+othercovdf['Mean'] = othercovdf.tcov/othercovdf.nt
+othercovdf['Covered1'] = othercovdf.Covered1/othercovdf.nt*100
+othercovdf['Covered2'] = othercovdf.Covered2/othercovdf.nt*100
+othercovdf['Region'] = othercovdf['Gene']
+othercovdf['Type'] = 'MSI/HAPLOTECT'
+
+covqcdf = pd.concat([genecovdf[['Gene','Type','Region','Mean','Covered1','Covered2']],svcovdf[['Gene','Type','Region','Mean','Covered1','Covered2']],othercovdf[['Gene','Type','Region','Mean','Covered1','Covered2']]])
 
 # get haplotect output
 haplotectdf = pd.read_csv(haplotect,sep='\t')
@@ -318,7 +337,7 @@ haplotectlocidf = haplotectlocidf.iloc[:, :-1]
 #
 #########################################
 
-print("Gathering variants...",file=sys.stderr)
+print("Gathering gene variants...",file=sys.stderr)
 
 vcf = VCF(vcffile)
 
@@ -375,41 +394,56 @@ for variant in vcf:
         csq = i.split("|")
         consequence = csq[vep['Consequence']].split("&")[0]
         # if this is the list of transcripts to use for annotation or if its not and its the 'picked' one'
-        if csq[vep['Feature']] in transcripts and consequence in nonSynon:
+        if csq[vep['Feature']] in transcripts or (transcript=='' and csq[vep['PICK']] == '1'):
             transcript = csq[vep['Feature']]
             gene = csq[vep['SYMBOL']]
-            csyntax = csq[vep['HGVSc']].split(":")
-            if len(csyntax) > 1:
-                csyntax = csyntax[1]
-            else:
-                csyntax = 'noncoding'
-    
-            psyntax = csq[vep['HGVSp']].split(":")
-            if len(psyntax) > 1:
-                psyntax = convert_aa(psyntax[1])
-                psyntax = re.sub("\%3D","=",psyntax)
-            else:
-                psyntax = csyntax
+
+            if consequence in nonSynon or (gene in nonCodingList.keys() and consequence in nonCodingList[gene]):
+
+                csyntax = csq[vep['HGVSc']].split(":")
+                if len(csyntax) > 1:
+                    csyntax = csyntax[1]
+                else:
+                    if 'upstream' in consequence:
+                        if csq[vep['STRAND']]==1:
+                            csyntax = "c.-"+str(csq[vep['DISTANCE']])+variant.REF+'>'+csq[0]
+                        else:
+                            csyntax = "c.-"+str(csq[vep['DISTANCE']])+revcomp(variant.REF)+'>'+revcomp(csq[0])
+
+                    elif 'downstream' in consequence:
+                        if csq[vep['STRAND']]==1:
+                            csyntax = "c.+"+str(csq[vep['DISTANCE']])+variant.REF+'>'+csq[0]
+                        else:
+                            csyntax = "c.+"+str(csq[vep['DISTANCE']])+revcomp(variant.REF)+'>'+revcomp(csq[0])
+                    else:
+                        csyntax = 'noncoding'
+
+                psyntax = csq[vep['HGVSp']].split(":")
+                if len(psyntax) > 1:
+                    psyntax = convert_aa(psyntax[1])
+                    psyntax = re.sub("\%3D","=",psyntax)
+                else:
+                    psyntax = consequence
             
-            impact = csq[vep['IMPACT']]
-            exon = csq[vep['EXON']] or 'NA'
-            intron = csq[vep['INTRON']] or 'NA'
-            customannotation = csq[vep['Existing_variation']] or 'NA'            
+                impact = csq[vep['IMPACT']]
+                exon = csq[vep['EXON']] or 'NA'
+                intron = csq[vep['INTRON']] or 'NA'
+                customannotation = csq[vep['Existing_variation']] or 'NA'            
+
+                popmaf = 'NA'
+                if csq[vep['MAX_AF']] != '':
+                    popmaf = float(csq[vep['MAX_AF']])
+
+                if popmaf!='NA' and popmaf >= caseinfo['maxaf']:
+                    cat = 'SNP'
+
+                elif varfilter!='PASS':
+                    cat = 'Filtered'
                 
-            popmaf = 'NA'
-            if csq[vep['MAX_AF']] != '':
-                popmaf = float(csq[vep['MAX_AF']])
+                else:
+                    cat = 'Tier1-3'
 
-            if varfilter!='PASS':
-                cat = 'Filtered'
-                
-            elif popmaf!='NA' and popmaf >= caseinfo['maxaf']:
-                cat = 'SNP'
-
-            else:
-                cat = 'Tier1-3'
-
-            variants = pd.concat([variants,pd.DataFrame([dict(zip(variants.columns,[cat,vartype,varfilter,str(variant.CHROM),str(variant.POS),variant.REF,variant.ALT[0],gene,transcript,consequence,csyntax,psyntax,exon,str(popmaf) + '%',customannotation,str(variant.format("DP")[0][0]),str(variant.format("AD")[0][1]),str(abundance)+"%"]))])])
+                variants = pd.concat([variants,pd.DataFrame([dict(zip(variants.columns,[cat,vartype,varfilter,str(variant.CHROM),str(variant.POS),variant.REF,variant.ALT[0],gene,transcript,consequence,csyntax,psyntax,exon,str(popmaf) + '%',customannotation,str(variant.format("DP")[0][0]),str(variant.format("AD")[0][1]),str(abundance)+"%"]))])])
 
 
 #
@@ -419,7 +453,6 @@ for variant in vcf:
 cnv = pd.read_csv(cnvsegoutput,delimiter='\t')
 cnvcalls = pd.concat([cnv[cnv['Segment_Name'].isin(qcranges['CNVTARGETS']['loss'])],cnv[cnv['Segment_Name'].isin(qcranges['CNVTARGETS']['gain'])]])
 
-
 cnvcalls['Filter'] = cnvcalls.apply(lambda r: testinrange(r,qcranges['CNVTARGETS']['loss'],qcranges['CNVTARGETS']['gain']), axis=1)
 cnvcalls['type'] = ''
 cnvcalls.loc[cnvcalls['Segment_Call']=='-','type'] = 'LOSS'
@@ -428,13 +461,156 @@ cnvcalls.loc[cnvcalls['Segment_Call']=='0','type'] = 'REF'
 cnvcalls = cnvcalls[['type','Segment_Name','Chromosome','Start','End','Segment_Mean','Qual','Filter','Copy_Number','Ploidy']].copy()
 cnvcalls.rename(columns={'Segment_Name':'gene','Chromosome':'chrom','Start':'start','End':'end','Segment_Mean':'copy_ratio','Qual':'qual','Filter':'filter','Copy_Number':'copynumber','Ploidy':'ploidy'},inplace=True)
 print("Starting report...",file=sys.stderr)
+
+
+#
+# Get SVs
+# 
+
+svvcf = VCF(svvcffile)
+
+# get known fusion events
+knownsvs = pd.read_csv(caseinfo['genefusions'],sep='\t', header=None)
+knownsvs.columns = ['gene1','gene2']
+
+svs = pd.DataFrame(columns=['type','psyntax','csyntax','filter','chr1','pos1','chr2','pos2','gene1','intron1','strand1','gene2','intron2','strand2','id','abundance','info'])
+
+# get VEP fields
+vep = {}
+i = 0
+for j in svvcf.get_header_type('CSQ')['Description'].split("|"):
+    vep[j] = i
+    i+=1
+
+passedvars = {}
+alreadydone = set()
+
+for variant in svvcf:
+    if variant.INFO['SVTYPE']!='BND':
+        continue
+
+    passedvars[variant.ID] = variant
+
+for v in passedvars.items():
+
+    variant = v[1]
+    isknown = 0
+    knowngenes = []
+    mate = ''
+
+    filter = 'PASS'
+    if variant.FILTER is not None:
+        filter = variant.FILTER
+
+    # get gene 1 info
+    gene1='NA'
+    transcript1='NA'
+    intron1 = 'NA'
+    strand1 = '+'
+    for i in variant.INFO['CSQ'].split(','):
+        csq = i.split("|")
+        consequence = csq[vep['Consequence']].split("&")[0]
+        # if this is the list of transcripts to use for annotation or if its not and its the 'picked' one'
+        if csq[vep['Feature']] in transcripts: # or (transcript1=='' and csq[vep['PICK']] == '1'):
+            transcript1 = csq[vep['Feature']]
+            gene1 = csq[vep['SYMBOL']]
+            intron1 = csq[vep['INTRON']].split('/')[0]
+            if csq[vep['STRAND']]==-1:
+                strand1 = '-'
+
+
+    chr1 = str(variant.CHROM)
+    pos1 = variant.POS
+                        
+    # skip if this is the mate
+    if variant.INFO.get('MATEID') in alreadydone or variant.INFO.get('MATEID') not in passedvars:
+        continue
+            
+    # get the mate
+    mate = passedvars[variant.INFO.get('MATEID')]
+
+    matecsq = mate.INFO.get('CSQ')
+
+    if matecsq is None:
+        sys.exit("No VEP fields")
+                
+    gene2='NA'
+    transcript2='NA'
+    intron2 = 'NA'
+    strand2 = '+'
+    for i in mate.INFO['CSQ'].split(','):
+        csq = i.split("|")
+        consequence = csq[vep['Consequence']].split("&")[0]
+        # if this is the list of transcripts to use for annotation or if its not and its the 'picked' one'
+        if csq[vep['Feature']] in transcripts: # or (transcript2=='' and csq[vep['PICK']] == '1'):
+            transcript2 = csq[vep['Feature']]
+            gene2 = csq[vep['SYMBOL']]
+            intron2 = csq[vep['INTRON']].split('/')[0]
+            if csq[vep['STRAND']]==-1:
+                strand2 = '-'
+
+    chr2 = mate.CHROM
+    pos2 = mate.POS
+        
+    if gene1=='NA':
+        gene1 = 'INTERGENIC'
+        
+    if gene2=='NA':
+        gene2 = 'INTERGENIC'
     
+    # one gene must be a targeted one
+    if any([gene1 in x for x in svgenes]) is False and any([gene2 in x for x in svgenes]) is False:
+        continue
+
+    # check to see if the gene pairs are in our 'database' otherwise list as novel SV involving one of the targeted genes
+    if len(knownsvs[(knownsvs['gene1']==gene1) & (knownsvs['gene2']==gene2)])==0 and len(knownsvs[(knownsvs['gene1']==gene2) & (knownsvs['gene2']==gene1)])==0:
+        filter = 'NovelSV'
+
+    # abundance
+    abundance = 0.0
+    pr = (0,0)
+    sr = (0,0)            
+    if variant.format("SR") is not None:
+        sr = variant.format("SR")[0]
+            
+    if variant.format("PR")[0] is not None:                
+        pr =  variant.format("PR")[0]
+
+    abundance = (sr[1] + pr[1]) / (pr[0] + pr[1] + sr[0] + sr[1]) * 100
+
+    if sr[1] <= 10 or abundance < 5.0:
+        continue
+
+    alt = variant.ALT[0]
+    strand = '+'
+    if alt.find("[") == 0 or alt.find("]") > 0:
+        strand = '-'
+            
+    csyntax = ''
+    if (chr1.find('X') == -1 and chr2.find('X') == -1 and chr1.find('Y') == -1 and chr2.find('Y') == -1 and int(chr1.replace('chr','')) < int(chr2.replace('chr',''))) or chr1.find('X') > -1 or chr1.find('Y') > -1: # this isnt working. Want to list lower chromosome first in these strings. If X is involved, then X first.
+        csyntax = chr1 + ":g." + str(pos1) + "(+)::" + chr2 + ":g." + str(pos2) + "(" + strand + ")"
+    else:
+        csyntax = chr2 + ":g." + str(pos2) + "(+)::" + chr1 + ":g." + str(pos1) + "(" + strand + ")"
+        
+    psyntax = ''
+    if (strand1=="+" and (alt.find("[")>0 or alt.find("]")>0)) or (strand1=="-" and (alt.find("]")==0 or alt.find("[")==0)):
+        psyntax = gene1 + '::' + gene2
+    else:
+        psyntax = gene2 + '::' + gene1
+
+    infostring = 'PR_READS=' + str(pr[1]) + '/' + str(pr[0]+pr[1]) + ';SR_READS=' + str(sr[1]) + '/' + str(sr[0]+sr[1]) + ';CONTIG=' + str(variant.INFO.get('CONTIG'))
+    svs.loc[len(svs.index)] = ['BND',psyntax,csyntax,filter,chr1,str(pos1),chr2,str(pos2),gene1,intron1,strand1,gene2,intron2,strand2,str(variant.ID) + ";" + str(mate.ID),str(round(abundance,1))+"%",infostring]
+
+    alreadydone.add(variant.ID)
+
+
+
 #
 # Start report
 #
 
 # make dict for report and redirect output for text report
-jsonout = {'CASEINFO':{},'VARIANTS':{},'CNV':{},'QC':{},'MSI':{},'TMB':{}}
+jsonout = {'CASEINFO':{},'VARIANTS':{},'CNV':{},'FUSIONS':{},'QC':{},'MSI':{},'TMB':{}}
 
 f = open(caseinfo['name'] + ".report.txt", "w")
 sys.stdout = f
@@ -497,6 +673,24 @@ if cnvcalls.shape[0] > 0:
 else:
     print("None Detected\n")
 
+print("*** GENE FUSION VARIANTS ***\n")
+
+if svs[svs['filter']=='PASS'].shape[0] > 0:
+    print(svs[svs['filter']=='PASS'].to_csv(sep='\t',header=True, index=False))
+    jsonout['FUSIONS']['PASS'] = svs[svs['filter']=='PASS'].to_dict('split')
+    del jsonout['FUSIONS']['PASS']['index']
+else:
+    print("None Detected\n")
+
+print("*** FILTERED GENE FUSION VARIANTS ***\n")
+
+if svs[svs['filter']!='PASS'].shape[0] > 0:
+    print(svs[svs['filter']!='PASS'].to_csv(sep='\t',header=True, index=False))
+    jsonout['FUSIONS']['Filtered'] = svs[svs['filter']!='PASS'].to_dict('split')
+    del jsonout['FUSIONS']['Filtered']['index']
+else:
+    print("None Detected\n")
+
 print("*** MSI ***\n")
 with open(MSIjson) as msi_json:
     MSI_json = json.load(msi_json)
@@ -537,15 +731,6 @@ for qc in ['MAPPING/ALIGNING SUMMARY','COVERAGE SUMMARY','UMI SUMMARY']:
 
 print()
 
-#print("*** HOTSPOT QC ***\n")
-
-#xdf = covqcdf[(covqcdf.Type == "hotspot")][['Gene','Region','Mean']]
-#xdf = xdf.rename(columns={"Region":"Hotspot"})
-#xdf['QC'] = np.where(xdf['Mean'] < minTargetCov, '(!)', '')
-#print(xdf.to_csv(sep='\t',header=True, index=False,float_format='%.1f'))
-#jsonout['QC']['HOTSPOT QC'] = xdf.to_dict('split')
-#jsonout['QC']['HOTSPOT QC'].pop('index', None)
-
 print("*** GENE COVERAGE QC ***\n")
 
 xdf = covqcdf[(covqcdf.Type == "Gene")][['Gene','Mean','Covered1','Covered2']]
@@ -566,6 +751,15 @@ print(xdf.to_csv(sep='\t',header=True, index=False,float_format='%.1f'))
 jsonout['QC']['FUSION COVERAGE QC'] = xdf.to_dict('split')
 jsonout['QC']['FUSION COVERAGE QC'].pop('index', None)
 
+print("*** MSI/HAPLOTECT COVERAGE QC ***\n")
+
+xdf = covqcdf[(covqcdf.Type == "MSI/HAPLOTECT")][['Gene','Mean','Covered1','Covered2']]
+xdf['QC'] = np.where((xdf['Mean'] < minCoverage) | (xdf['Covered1']<minFractionCovered), '(!)', '')
+xdf.rename(columns={'Covered1':'%CoveredAt'+str(int(minTargetCoverage[0]))+'x','Covered2':'%CoveredAt'+str(int(minTargetCoverage[1]))+'x'},inplace=True)
+print(xdf.to_csv(sep='\t',header=True, index=False,float_format='%.1f'))
+
+jsonout['QC']['MSI/HAPLOTECT COVERAGE QC'] = xdf.to_dict('split')
+jsonout['QC']['MSI/HAPLOTECT COVERAGE QC'].pop('index', None)
 
 print("*** Haplotect Contamination Estimate ***\n")
 
