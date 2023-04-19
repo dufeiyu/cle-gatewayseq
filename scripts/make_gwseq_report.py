@@ -139,6 +139,14 @@ minCoverage = float(qcranges['COVERAGE SUMMARY: Average alignment coverage over 
 nonSynon = ['splice_acceptor_variant','splice_donor_variant','stop_gained','frameshift_variant','stop_lost','start_lost','transcript_amplification','inframe_insertion','inframe_deletion','missense_variant','protein_altering_variant']
 nonCodingList = qcranges['NONCODINGVARIANTLIST']
 
+# TMB quartiles
+tmbquartiles = [ float(x) for x in qcranges['TMBQUARTILES'].split(',') ]
+
+if len(tmbquartiles)!=4:
+    sys.exit("TMB quartiles incorrect! must be 4")
+
+tmbquartiles = dict(zip(tmbquartiles,['0-25','25-50','50-75','75-100']))
+
 #########################################
 #
 # Get files from the case directory 
@@ -188,7 +196,7 @@ qcdf = pd.DataFrame(columns=['metric','value'])
 covqcdf = pd.DataFrame(columns=['Gene','Type','Region','Mean','Covered1','Covered2'])
 
 # dataframe with all variants
-variants = pd.DataFrame(columns=['category','type','filter','chrom','pos','ref','alt','gene','transcript','consequence','csyntax','psyntax','exon','popaf','annotations','coverage','altreads','vaf'])
+variants = pd.DataFrame(columns=['type','filter','chrom','pos','ref','alt','gene','transcript','consequence','csyntax','psyntax','exon','popaf','annotations','coverage','altreads','vaf'])
 
 #########################################
 #
@@ -352,8 +360,6 @@ for j in vcf.get_header_type('CSQ')['Description'].split("|"):
 # get variants
 for variant in vcf:
 
-    cat = 'Tier1-3'
-    
     vartype = ''
     if len(variant.REF) == len(variant.ALT[0]):
         vartype = 'SNV'
@@ -431,20 +437,16 @@ for variant in vcf:
                 intron = csq[vep['INTRON']] or 'NA'
                 customannotation = csq[vep['Existing_variation']] or 'NA'            
 
+                # set filter/category
                 popmaf = 'NA'
                 if csq[vep['MAX_AF']] != '':
                     popmaf = float(csq[vep['MAX_AF']])
 
+                # skip variants >0.1%
                 if popmaf!='NA' and popmaf >= caseinfo['maxaf']:
-                    cat = 'SNP'
+                    continue 
 
-                elif varfilter!='PASS':
-                    cat = 'Filtered'
-                
-                else:
-                    cat = 'Tier1-3'
-
-                variants = pd.concat([variants,pd.DataFrame([dict(zip(variants.columns,[cat,vartype,varfilter,str(variant.CHROM),str(variant.POS),variant.REF,variant.ALT[0],gene,transcript,consequence,csyntax,psyntax,exon,str(popmaf) + '%',customannotation,str(variant.format("DP")[0][0]),str(variant.format("AD")[0][1]),str(abundance)+"%"]))])])
+                variants = pd.concat([variants,pd.DataFrame([dict(zip(variants.columns,[vartype,varfilter,str(variant.CHROM),str(variant.POS),variant.REF,variant.ALT[0],gene,transcript,consequence,csyntax,psyntax,exon,str(popmaf) + '%',customannotation,str(variant.format("DP")[0][0]),str(variant.format("AD")[0][1]),str(abundance)+"%"]))])])
 
 
 #
@@ -640,82 +642,116 @@ jsonout['CASEINFO'] = caseinfo
 
 print("*** GENE MUTATIONS ***\n")
 
-if variants[variants['category']=='Tier1-3'].shape[0] > 0:
-    print(variants[variants['category']=='Tier1-3'].iloc[:,1:].to_csv(sep='\t',header=True, index=False))
-    jsonout['VARIANTS']['Tier1-3'] = variants[variants['category']=='Tier1-3'].iloc[:,1:].to_dict('split')
+if variants[variants['filter']=='PASS'].shape[0] > 0:
+    print(variants[variants['filter']=='PASS'].to_csv(sep='\t',header=True, index=False))
+    jsonout['VARIANTS']['Tier1-3'] = variants[variants['filter']=='PASS'].to_dict('split')
     del jsonout['VARIANTS']['Tier1-3']['index']
 else:
     print("None Detected\n")
 
 print("*** FILTERED GENE MUTATIONS ***\n")
 
-if variants[variants['category']=='Filtered'].shape[0] > 0:
-    print(variants[variants['category']=='Filtered'].iloc[:,1:].to_csv(sep='\t',header=True, index=False))
-    jsonout['VARIANTS']['Filtered'] = variants[variants['category']=='Filtered'].iloc[:,1:].to_dict('split')
-    del jsonout['VARIANTS']['Filtered']['index']
+if variants[variants['filter']!='PASS'].shape[0] > 0:
+    print(variants[variants['filter']!='PASS'].to_csv(sep='\t',header=True, index=False))
 else:
     print("None Detected\n")
+
+jsonout['VARIANTS']['Filtered'] = variants[variants['filter']!='PASS'].to_dict('split')
+del jsonout['VARIANTS']['Filtered']['index']
 
 print("*** COPY NUMBER VARIANTS ***\n")
 
-if cnvcalls.shape[0] > 0:
-    print(cnvcalls[cnvcalls['filter']=='PASS'].to_csv(sep='\t',header=True, index=False))
+if 'low input' in caseinfo['exception'].lower():
+    print("Not performed\n")
+    jsonout['CNV'] = False
+
+else:
     jsonout['CNV']['PASS'] = cnvcalls[cnvcalls['filter']=='PASS'].to_dict('split')
     del jsonout['CNV']['PASS']['index']
-else:
-    print("None Detected\n")
 
-print("*** FILTERED COPY NUMBER VARIANTS ***\n")
-
-if cnvcalls.shape[0] > 0:
-    print(cnvcalls[cnvcalls['filter']!='PASS'].to_csv(sep='\t',header=True, index=False))
     jsonout['CNV']['Filtered'] = cnvcalls[cnvcalls['filter']!='PASS'].to_dict('split')
     del jsonout['CNV']['Filtered']['index']
-else:
-    print("None Detected\n")
+
+    if cnvcalls[cnvcalls['filter']=='PASS'].shape[0] > 0:
+        print(cnvcalls[cnvcalls['filter']=='PASS'].to_csv(sep='\t',header=True, index=False))
+    else:
+        print("None Detected\n")
+
+
+    print("*** FILTERED COPY NUMBER VARIANTS ***\n")
+
+    if cnvcalls[cnvcalls['filter']!='PASS'].shape[0] > 0:
+        print(cnvcalls[cnvcalls['filter']!='PASS'].to_csv(sep='\t',header=True, index=False))
+    else:
+        print("None Detected\n")
+
 
 print("*** GENE FUSION VARIANTS ***\n")
 
-if svs[svs['filter']=='PASS'].shape[0] > 0:
-    print(svs[svs['filter']=='PASS'].to_csv(sep='\t',header=True, index=False))
+if 'low input' in caseinfo['exception'].lower():
+    print("Not performed\n")
+    jsonout['FUSIONS'] = False
+
+else:
     jsonout['FUSIONS']['PASS'] = svs[svs['filter']=='PASS'].to_dict('split')
     del jsonout['FUSIONS']['PASS']['index']
-else:
-    print("None Detected\n")
-
-print("*** FILTERED GENE FUSION VARIANTS ***\n")
-
-if svs[svs['filter']!='PASS'].shape[0] > 0:
-    print(svs[svs['filter']!='PASS'].to_csv(sep='\t',header=True, index=False))
     jsonout['FUSIONS']['Filtered'] = svs[svs['filter']!='PASS'].to_dict('split')
     del jsonout['FUSIONS']['Filtered']['index']
-else:
-    print("None Detected\n")
+
+    if svs[svs['filter']=='PASS'].shape[0] > 0:
+        print(svs[svs['filter']=='PASS'].to_csv(sep='\t',header=True, index=False))    
+    else:
+        print("None Detected\n")
+
+    print("*** FILTERED GENE FUSION VARIANTS ***\n")
+
+    if svs[svs['filter']!='PASS'].shape[0] > 0:
+        print(svs[svs['filter']!='PASS'].to_csv(sep='\t',header=True, index=False))
+    else:
+        print("None Detected\n")
 
 print("*** MSI ***\n")
-with open(MSIjson) as msi_json:
-    MSI_json = json.load(msi_json)
-msi_json.close()
-print("PercentageUnstableSites: " + MSI_json["PercentageUnstableSites"])
-print("ResultIsValid: " + MSI_json["ResultIsValid"])
-print("SumDistance: " + MSI_json["SumDistance"])
-jsonout['MSI']['PercentageUnstableSites'] = MSI_json['PercentageUnstableSites']
-jsonout['MSI']['ResultIsValid'] = MSI_json['ResultIsValid']
-jsonout['MSI']['SumDistance'] = MSI_json['SumDistance']
+
+if 'low input' in caseinfo['exception'].lower():
+    print("Not performed\n")
+    jsonout['MSI'] = False
+
+else:
+
+    with open(MSIjson) as msi_json:
+        MSI_json = json.load(msi_json)
+    msi_json.close()
+    print("PercentageUnstableSites: " + MSI_json["PercentageUnstableSites"])
+    print("ResultIsValid: " + MSI_json["ResultIsValid"])
+    print("SumDistance: " + MSI_json["SumDistance"])
+    jsonout['MSI']['PercentageUnstableSites'] = MSI_json['PercentageUnstableSites']
+    jsonout['MSI']['ResultIsValid'] = MSI_json['ResultIsValid']
+    jsonout['MSI']['SumDistance'] = MSI_json['SumDistance']
 
 print("\n*** TMB ***\n")
-with open(TMBcsv, 'r') as tmb_csv:
-    tmb_reader = csv.reader(tmb_csv, delimiter=',')
-    for tmb_line in tmb_reader:
-        if tmb_line[2] == 'TMB':
-            TMB = tmb_line[3]
-        if tmb_line[2] == 'Nonsyn TMB':
-            NS_TMB = tmb_line[3]
-tmb_csv.close()
-print('TMB: '+ TMB)
-print('Nonsyn TMB: ' + NS_TMB)
-jsonout['TMB']['TMB'] = TMB
-jsonout['TMB']['Nonsyn TMB'] = NS_TMB
+
+if 'low input' in caseinfo['exception'].lower():
+    print("Not performed\n")
+    jsonout['TMB'] = False
+
+else:
+
+    with open(TMBcsv, 'r') as tmb_csv:
+        tmb_reader = csv.reader(tmb_csv, delimiter=',')
+        for tmb_line in tmb_reader:
+            if tmb_line[2] == 'TMB':
+                TMB = tmb_line[3]
+            if tmb_line[2] == 'Nonsyn TMB':
+                NS_TMB = tmb_line[3]
+        tmb_csv.close()
+    tmblevel = min((x for x in tmbquartiles.keys() if x <= float(NS_TMB)), key=lambda x: abs(x - float(NS_TMB)))
+    print('TMB: '+ TMB)
+    print('Nonsyn TMB: ' + NS_TMB)
+    print('Nonsyn TMB Quartile: ' + tmbquartiles[tmblevel])
+    jsonout['TMB']['TMB'] = TMB
+    jsonout['TMB']['Nonsyn TMB'] = NS_TMB
+    jsonout['TMB']['Nonsyn TMB Quartile'] = tmbquartiles[tmblevel]
+
 
 print("\n*** SEQUENCING QC ***\n")
 
