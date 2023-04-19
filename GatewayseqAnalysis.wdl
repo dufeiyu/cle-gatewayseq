@@ -17,6 +17,7 @@ workflow GatewayseqAnalysis {
         String QcMetrics
         String CoverageBed
         String HaplotectBed
+        String SVGeneList
         String CivicCachePath
 
         String SubDir
@@ -92,6 +93,7 @@ workflow GatewayseqAnalysis {
         input: order_by=gather_files.done,
                Name=Name,
                CoverageBed=CoverageBed,
+               SVGeneList=SVGeneList,
                QcMetrics=QcMetrics,
                OutputDir=OutputDir,
                SubDir=SubDir,
@@ -287,6 +289,7 @@ task make_report {
          String order_by
          String Name
          String CoverageBed
+         String SVGeneList
          String QcMetrics
          String OutputDir
          String SubDir
@@ -297,7 +300,7 @@ task make_report {
      String SampleOutDir = OutputDir + "/" + SubDir
 
      command {
-         /usr/bin/python3 /storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/scripts/make_gwseq_report.py -n ${Name} -d ${SampleOutDir} -q ${QcMetrics} && \
+         /usr/bin/python3 /storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/scripts/make_gwseq_report.py -n ${Name} -d ${SampleOutDir} -l ${SVGeneList} -q ${QcMetrics} && \
          /bin/mv ./*.report.txt ./*.report.json ${SampleOutDir}
      }
      runtime {
