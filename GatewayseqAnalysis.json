@@ -14,6 +14,7 @@
     "GatewayseqAnalysis.QcMetrics":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GatewaySeqQCMetrics.json",
     "GatewayseqAnalysis.CoverageBed":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GWSeq.all.hg38.bed",
     "GatewayseqAnalysis.HaplotectBed":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/myeloseq.haplotect_snppairs_hg38.041718.bed", 
+    "GatewayseqAnalysis.SVGeneList":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GWSeq.gene_fusions.txt",
     "GatewayseqAnalysis.CivicCachePath":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl",
     "GatewayseqAnalysis.JobGroup":"/cle/wdl/haloplex",
     "GatewayseqAnalysis.Queue":"gtac-mgi"

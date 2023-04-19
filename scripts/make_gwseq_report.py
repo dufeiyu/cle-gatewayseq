@@ -564,7 +564,7 @@ for v in passedvars.items():
         continue
 
     # check to see if the gene pairs are in our 'database' otherwise list as novel SV involving one of the targeted genes
-    if len(knownsvs[(knownsvs['gene1']==gene1) & (knownsvs['gene2']==gene2)])==0 and len(knownsvs[(knownsvs['gene1']==gene2) & (knownsvs['gene2']==gene1)])==0:
+    if len(knownsvs[(knownsvs['gene1']==gene1) and (knownsvs['gene2']==gene2)])==0 and len(knownsvs[(knownsvs['gene1']==gene2) and (knownsvs['gene2']==gene1)])==0:
         filter = 'NovelSV'
 
     # abundance

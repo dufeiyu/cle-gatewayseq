@@ -17,6 +17,7 @@ workflow Gatewayseq {
         String CoverageBed
         String GeneCoverageBed
         String OtherCoverageBed
+        String SVGeneList
         String CivicCachePath
         String JobGroup
         String OutputDir
@@ -111,6 +112,7 @@ workflow Gatewayseq {
                    CivicCachePath=CivicCachePath,
                    Vepcache=VEP,
                    CoverageBed=CoverageBed,
+                   SVGeneList=SVGeneList,
                    QcMetrics=QcMetrics,
                    DragenVcf=dragen_align.vcf,
                    DragenVcfIndex=dragen_align.index,
