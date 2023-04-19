@@ -13,9 +13,10 @@
     "Minimum target coverage": "100,250",
     "Target fraction at coverage": "95,",
     "Failed hotspot": "0",
-    "CNVTARGETS":{"gain":["ALK","BRAF","CCND1","CCNE1","CDK4","EGFR","ERBB2","FGFR1","FGFR3","KRAS","MDM2","MET","MYC","MYCN","PDGFRA"],
-		  "loss":["BRCA1","BRCA2","CDKN2A_B","PTEN","TP53"]},
+    "CNVTARGETS":{"gain":["CCND1","CCNE1","EGFR","KRAS","MDM2","MET","MYC","PDGFRA"],
+		  "loss":["CDKN2A_B","PTEN","TP53"]},
     "NONCODINGVARIANTLIST":{"TERT":["upstream_gene_variant"]},
+    "CNVRATIOS":"0.5,2.0",
     "TMBQUARTILES":"0,7.8625,11.795,23.21",
     "ASSAY VERSION": "1.0",
     "DISCLAIMER": "This laboratory developed test (LDT) was developed and its performance characteristics determined by the CLIA Licensed Environment laboratory at the McDonnell Genome Institute at Washington University (MGI-CLE, CLIA #26D2092546, CAP #9047655), Dr. David H. Spencer MD, PhD, FCAP, Medical Director. 4444 Forest Park Avenue, Rm 4111 St. Louis, Missouri 63108 (314) 286-1460 Fax: (314) 286-1810. The MGI-CLE laboratory is regulated under CLIA as certified to perform high-complexity testing. Interpretation of sequencing results and case sign out is performed by Pathology and Immunology faculty in the Division of Anatomic and Molecular Pathology (WU-AMP Core Laboratory, CLIA #26D2013203, CAP #7233522) Dr. Charles Eby, MD, Medical Director. Pathology Consult Services, 425 S. Euclid Ave, Suite 4711, Mailstop 8024-14-4711, St. Louis, MO 63110 (314)-362-7784 Fax: (314) 362-4080. The AMP core laboratory is regulated under CLIA as certified to perform high-complexity testing. This test has not been cleared or approved by the FDA."

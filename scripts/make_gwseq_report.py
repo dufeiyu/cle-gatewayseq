@@ -566,7 +566,7 @@ for v in passedvars.items():
         continue
 
     # check to see if the gene pairs are in our 'database' otherwise list as novel SV involving one of the targeted genes
-    if len(knownsvs[(knownsvs['gene1']==gene1) and (knownsvs['gene2']==gene2)])==0 and len(knownsvs[(knownsvs['gene1']==gene2) and (knownsvs['gene2']==gene1)])==0:
+    if len(knownsvs[(knownsvs['gene1']==gene1) & (knownsvs['gene2']==gene2)])==0 and len(knownsvs[(knownsvs['gene1']==gene2) & (knownsvs['gene2']==gene1)])==0:
         filter = 'NovelSV'
 
     # abundance
@@ -715,43 +715,32 @@ print("*** MSI ***\n")
 if 'low input' in caseinfo['exception'].lower():
     print("Not performed\n")
     jsonout['MSI'] = False
-
 else:
-
     with open(MSIjson) as msi_json:
         MSI_json = json.load(msi_json)
     msi_json.close()
-    print("PercentageUnstableSites: " + MSI_json["PercentageUnstableSites"])
-    print("ResultIsValid: " + MSI_json["ResultIsValid"])
-    print("SumDistance: " + MSI_json["SumDistance"])
-    jsonout['MSI']['PercentageUnstableSites'] = MSI_json['PercentageUnstableSites']
-    jsonout['MSI']['ResultIsValid'] = MSI_json['ResultIsValid']
-    jsonout['MSI']['SumDistance'] = MSI_json['SumDistance']
+    msi_keys = ['TotalMicrosatelliteSitesAssessed', 'TotalMicrosatelliteSitesUnstable', 'PercentageUnstableSites', 'ResultIsValid']
+    for msi_key in msi_keys:
+        print(msi_key + ': ' + MSI_json[msi_key])
+        jsonout['MSI'][msi_key] = MSI_json[msi_key]
 
 print("\n*** TMB ***\n")
-
 if 'low input' in caseinfo['exception'].lower():
     print("Not performed\n")
     jsonout['TMB'] = False
-
 else:
-
+    tmb_keys = ['Total Input Variant Count in TMB region', 'Filtered Variant Count', 'Filtered Nonsyn Variant Count','Eligible Region (MB)', 'TMB', 'Nonsyn TMB']
     with open(TMBcsv, 'r') as tmb_csv:
         tmb_reader = csv.reader(tmb_csv, delimiter=',')
         for tmb_line in tmb_reader:
-            if tmb_line[2] == 'TMB':
-                TMB = tmb_line[3]
-            if tmb_line[2] == 'Nonsyn TMB':
-                NS_TMB = tmb_line[3]
-        tmb_csv.close()
-    tmblevel = min((x for x in tmbquartiles.keys() if x <= float(NS_TMB)), key=lambda x: abs(x - float(NS_TMB)))
-    print('TMB: '+ TMB)
-    print('Nonsyn TMB: ' + NS_TMB)
-    print('Nonsyn TMB Quartile: ' + tmbquartiles[tmblevel])
-    jsonout['TMB']['TMB'] = TMB
-    jsonout['TMB']['Nonsyn TMB'] = NS_TMB
-    jsonout['TMB']['Nonsyn TMB Quartile'] = tmbquartiles[tmblevel]
-
+            if tmb_line[2] in tmb_keys:
+                print(tmb_line[2] + ': ' + tmb_line[3])
+                jsonout['TMB'][tmb_line[2]] = tmb_line[3]
+                if tmb_line[2] == 'Nonsyn TMB':
+                    tmblevel = min((x for x in tmbquartiles.keys() if x <= float(tmb_line[3])), key=lambda x: abs(x - float(tmb_line[3])))
+                    print('Nonsyn TMB Quartile: ' + tmbquartiles[tmblevel])
+                    jsonout['TMB']['Nonsyn TMB Quartile'] = tmbquartiles[tmblevel]
+    tmb_csv.close()
 
 print("\n*** SEQUENCING QC ***\n")
 

@@ -9,7 +9,7 @@
     "Gatewayseq.GeneCoverageBed":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GWSeq.genes.hg38.bed",
     "Gatewayseq.OtherCoverageBed":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GWSeq.other.hg38.bed",
     "Gatewayseq.SVGeneList":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GWSeq.gene_fusions.txt",
-    "Gatewayseq.CivicCachePath":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl",    
+    "Gatewayseq.CivicCachePath":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl",
     "Gatewayseq.readfamilysize":1,
     "Gatewayseq.CNVfilterlength":5000,
     "Gatewayseq.JobGroup":"/cle/wdl/haloplex",

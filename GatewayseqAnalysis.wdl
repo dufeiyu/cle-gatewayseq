@@ -207,7 +207,7 @@ task annotate_sv {
 
     command {
         /usr/bin/perl -I /opt/vep/lib/perl/VEP/Plugins /opt/vep/src/ensembl-vep/vep --format vcf --vcf --fasta ${refFasta} \
-        --per_gene --symbol --term SO -o ${Name}.sv_annotated.vcf -i ${Vcf} --offline --cache --dir ${Vepcache} && \
+        --flag_pick --per_gene --symbol --term SO -o ${Name}.sv_annotated.vcf -i ${Vcf} --offline --cache --dir ${Vepcache} && \
         /usr/local/bin/bgzip ${Name}.sv_annotated.vcf && /usr/local/bin/tabix -p vcf ${Name}.sv_annotated.vcf.gz
     }
 
