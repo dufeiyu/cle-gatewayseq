@@ -72,9 +72,19 @@ def check_qc_reference_ranges(value, minimum, maximum, unit):
     return range_str
 
 # add filter if the call is the wrong direction of what is clinically actionable
-def testinrange(row,loss,gain):
+def testcnv(row,loss,gain,ratios):
     if row['Segment_Call']!='0' and ((row['Segment_Name'] in loss and row['Segment_Call']!='-') or (row['Segment_Name'] in gain and row['Segment_Call']!='+')):
-        return ';'.join([row['Filter'],'WrongSign'])
+        if row['Filter']=='PASS':
+            return 'WrongSign'
+        else:
+            return ';'.join([row['Filter'],'WrongSign'])
+        
+    elif (row['Segment_Name'] in loss and row['Segment_Call']=='-' and row['Segment_Mean']>ratios[0]) or (row['Segment_Name'] in gain and row['Segment_Call']=='+' and row['Segment_Mean']<ratios[1]):
+        if row['Filter']=='PASS':
+            return 'cnvRatio'
+        else:
+            return ';'.join([row['Filter'],'cnvRatio'])
+
     else:
         return row['Filter']
 
@@ -85,8 +95,8 @@ def testinrange(row,loss,gain):
 parser = argparse.ArgumentParser(description='Make GatewaySeq report')
 parser.add_argument('-n','--name',required=True,help='Sample name')
 parser.add_argument('-d','--dir',required=True,help='Output directory')
-parser.add_argument('-l','--fusionlist',required=True,help='Gene pairs to report for fusions')
-parser.add_argument('-q','--qcrangejsonfile',required=True,help='QCReferenceRanges.json')
+parser.add_argument('-l','--fusionlist',required=False,help='Gene pairs to report for fusions')
+parser.add_argument('-q','--qcrangejsonfile',required=False,help='QCReferenceRanges.json')
 parser.add_argument('-m','--mrn',default='NONE',help='Sample MRN number')
 parser.add_argument('-a','--accession',default='NONE',help='Sample accession number')
 parser.add_argument('-s','--specimen',default='NONE',help='Sample specimen type')
@@ -99,6 +109,8 @@ parser.add_argument('-i','--runinfostr',default='NONE',help='Illumina Run Inform
 parser.add_argument('-p','--maxaf',default=0.001,help='Maximum population allele frequency for potential somatic variants')
 
 args = parser.parse_args()
+
+repoLocation = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
 caseinfo = {}
 caseinfo['name'] = args.name
@@ -115,6 +127,12 @@ caseinfo['minvaf'] = float(args.minvaf)
 caseinfo['minreads'] = float(args.minreads)
 caseinfo['genefusions'] = args.fusionlist
 
+if not caseinfo['qcrange_file']:
+    caseinfo['qcrange_file'] = os.path.join(repoLocation,"accessory_files/GatewaySeqQCMetrics.json")
+
+if not caseinfo['genefusions']:
+    caseinfo['genefusions'] = os.path.join(repoLocation,"accessory_files/GWSeq.gene_fusions.txt")
+
 excludevaf = float(args.excludevaf)
 
 if caseinfo['specimen'] == 'BM':
@@ -127,6 +145,9 @@ elif caseinfo['specimen'] == 'PB':
 # Get Reference values for QC Metrics
 #
 #########################################
+
+if not Path(caseinfo['qcrange_file']).is_file():
+    sys.exit("QC json file " + str(caseinfo['qcrange_file']) + " not valid.")
 
 qcranges = {}
 with open(caseinfo['qcrange_file'], 'r') as json_file:
@@ -453,15 +474,17 @@ for variant in vcf:
 # Get CNVs
 #
 
+cnvratios = [ float(x) for x in qcranges['CNVRATIOS'].split(',') ]
+
 cnv = pd.read_csv(cnvsegoutput,delimiter='\t')
 cnvcalls = pd.concat([cnv[cnv['Segment_Name'].isin(qcranges['CNVTARGETS']['loss'])],cnv[cnv['Segment_Name'].isin(qcranges['CNVTARGETS']['gain'])]])
 
-cnvcalls['Filter'] = cnvcalls.apply(lambda r: testinrange(r,qcranges['CNVTARGETS']['loss'],qcranges['CNVTARGETS']['gain']), axis=1)
+cnvcalls['Filter'] = cnvcalls.apply(lambda r: testcnv(r,qcranges['CNVTARGETS']['loss'],qcranges['CNVTARGETS']['gain'],cnvratios), axis=1)
 cnvcalls['type'] = ''
 cnvcalls.loc[cnvcalls['Segment_Call']=='-','type'] = 'LOSS'
 cnvcalls.loc[cnvcalls['Segment_Call']=='+','type'] = 'GAIN'
 cnvcalls.loc[cnvcalls['Segment_Call']=='0','type'] = 'REF'
-cnvcalls = cnvcalls[['type','Segment_Name','Chromosome','Start','End','Segment_Mean','Qual','Filter','Copy_Number','Ploidy']].copy()
+cnvcalls = cnvcalls[['type','Filter','Chromosome','Start','End','Segment_Name','Segment_Mean','Qual','Copy_Number','Ploidy']].copy()
 cnvcalls.rename(columns={'Segment_Name':'gene','Chromosome':'chrom','Start':'start','End':'end','Segment_Mean':'copy_ratio','Qual':'qual','Filter':'filter','Copy_Number':'copynumber','Ploidy':'ploidy'},inplace=True)
 print("Starting report...",file=sys.stderr)
 
