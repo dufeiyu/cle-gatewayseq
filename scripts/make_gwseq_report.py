@@ -129,6 +129,7 @@ parser.add_argument('-b','--DOB',default='NONE',help='Date of birth')
 parser.add_argument('-e','--exception',default='NONE',help='Exception')
 parser.add_argument('-i','--runinfostr',default='NONE',help='Illumina Run Information String')
 parser.add_argument('--variantdb',required=False,default=None,help='Sqlite database file for variant lookup and recording')
+parser.add_argument('--noupdate',required=False,default=False,action='store_true',help='Dont update variant database')
 parser.add_argument('--excludevaf',default=None,type=float,help='Minimum VAF for reporting, below this will not be shown')
 parser.add_argument('--minvaf',default=None,type=float,help='Minimum validated VAF')
 parser.add_argument('--minreads',default=None,type=float,help='Minimum alt reads to report variant')
@@ -293,6 +294,7 @@ cnvs = pd.DataFrame(columns=['type','gene','chrom','start','end','copy_ratio','q
 # this is for tmb and msi
 biomarkers = pd.DataFrame(columns=['metric','value'])
 
+# df for haplotect loci
 haplotectlocidf = pd.DataFrame(columns=['chr','SNP1','SNP2','all11','all12','all21','all22','popn_counts','distance','total_count','sample_counts'])
 
 #
@@ -376,9 +378,12 @@ ntAtCovlevel2 = sum(fullResCovPr[fullResCovPr.Coverage>minTargetCoverage[1]].len
 qcdf.loc[len(qcdf.index)] = ['COVERAGE SUMMARY: Target at ' + str(minTargetCoverage[0]) + 'x (%)', ntAtCovlevel1/sum(fullResCovPr.lengths())*100, '']
 qcdf.loc[len(qcdf.index)] = ['COVERAGE SUMMARY: Target at ' + str(minTargetCoverage[1]) + 'x (%)', ntAtCovlevel2/sum(fullResCovPr.lengths())*100, '']
 
+####################
 #
 # Haplotect
 #
+####################
+
 haplotectdf = pd.read_csv(haplotect,sep='\t')
 haplotectdf.columns = haplotectdf.columns.str.replace('#', '')
 haplotectdf = haplotectdf.iloc[:, :-2]
@@ -388,14 +393,14 @@ haplotectlocidf = pd.read_csv(haplotectloci,sep='\t',skiprows=2)
 haplotectlocidf.columns = haplotectlocidf.columns.str.replace('#', '')
 haplotectlocidf = haplotectlocidf.iloc[:, :-1]
 
-
 # update database w/ QC and haplotect output
 if variantdb is not None:
     df = haplotectdf.transpose().reset_index().drop(index=0)
     df.columns = ['metric','value']
     df['percent'] = 'NA'
     dbUpdateVariants(dbcon,'qcdata',caseinfo,pd.concat([qcdf,df]))
-    dbUpdateVariants(dbcon,'haplotectloci',caseinfo,haplotectlocidf)
+    if args.noupdate is False:
+        dbUpdateVariants(dbcon,'haplotectloci',caseinfo,haplotectlocidf)
 
 
 # get gene coverage info
@@ -463,7 +468,7 @@ othercovdf['Type'] = 'MSI/HAPLOTECT'
 covqcdf = pd.concat([genecovdf[['Gene','Type','Region','Mean','Covered1','Covered2']],svcovdf[['Gene','Type','Region','Mean','Covered1','Covered2']],othercovdf[['Gene','Type','Region','Mean','Covered1','Covered2']]])
 
 # update database with new results, if necessary
-if variantdb is not None:
+if variantdb is not None and args.noupdate is False:
     dbUpdateVariants(dbcon,'coverage',caseinfo,covqcdf)
 
 
@@ -604,11 +609,14 @@ if variantdb is not None and variants.shape[0] > 0:
     queryFiltered = '''SELECT COUNT(*) FROM variants WHERE filter != "PASS" AND name != ? AND chrom = ? AND pos = ? AND ref = ? AND alt = ?'''
     variants['dblookup'] = variants.apply(lambda x: dbAnnotateVariants(dbcon,queryPass,queryFiltered,(caseinfo['name'],x['chrom'],x['pos'],x['ref'],x['alt'])),axis=1)
 
-    dbUpdateVariants(dbcon,'variants',caseinfo,variants)
+    if args.noupdate is False:
+        dbUpdateVariants(dbcon,'variants',caseinfo,variants)
 
+########################
 #
 # Get CNVs
 #
+########################
 
 cnvratios = [ float(x) for x in qcranges['CNVRATIOS'].split(',') ]
 
@@ -632,11 +640,14 @@ if variantdb is not None and cnvs.shape[0] > 0:
     queryFiltered = '''SELECT COUNT(*) FROM cnvs WHERE filter != "PASS" AND name != ? AND gene = ? AND type = ?'''
     cnvs['dblookup'] = cnvs.apply(lambda x: dbAnnotateVariants(dbcon,queryPass,queryFiltered,(caseinfo['name'],x['gene'],x['type'])),axis=1)
 
-    dbUpdateVariants(dbcon,'cnvs',caseinfo,cnvs)
+    if args.noupdate is False:
+        dbUpdateVariants(dbcon,'cnvs',caseinfo,cnvs)
 
+########################
 #
 # Get SVs
 # 
+########################
 
 svvcf = VCF(svvcffile)
 
@@ -869,11 +880,14 @@ if variantdb is not None and svs.shape[0] > 0:
     queryFiltered = '''SELECT COUNT(*) FROM svs WHERE filter != "PASS" AND name != ? AND gene1 = ? AND region1 = ? AND gene2 = ? AND region2 = ?'''
     svs['dblookup'] = svs.apply(lambda x: dbAnnotateVariants(dbcon,queryPass,queryFiltered,(caseinfo['name'],x['gene1'],x['region1'],x['gene2'],x['region2'])),axis=1)
 
-    dbUpdateVariants(dbcon,'svs',caseinfo,svs)
+    if args.noupdate is False:
+        dbUpdateVariants(dbcon,'svs',caseinfo,svs)
 
+########################
 #
 # MSI
 #
+########################
 
 with open(MSIjson) as msi_json:
     MSI_json = json.load(msi_json)
@@ -882,9 +896,11 @@ msi_keys = ['TotalMicrosatelliteSitesAssessed', 'TotalMicrosatelliteSitesUnstabl
 msi = pd.DataFrame(list(MSI_json.items()), columns=['metric', 'value'])
 msi = msi[msi.metric.isin(msi_keys)]
 
+########################
 #
 # TMB
 #
+########################
 
 tmb_keys = ['Total Input Variant Count in TMB region', 'Filtered Variant Count', 'Filtered Nonsyn Variant Count','Eligible Region (MB)', 'TMB', 'Nonsyn TMB']
 tmb = pd.read_csv(TMBcsv,sep=',',names=['group','fill','metric','value'])[['metric','value']]
@@ -895,15 +911,18 @@ tmb = pd.concat([tmb,pd.DataFrame([{'metric':'Nonsyn TMB Quartile','value':tmbQu
 #
 # update database with new results, if necessary
 #
-if variantdb is not None:
+if variantdb is not None and args.noupdate is False:
     dbUpdateVariants(dbcon,'biomarkers',caseinfo,pd.concat([msi,tmb]))
 
 # close database
 if variantdb is not None:
     dbcon.close()
+
+########################
 #
 # Start report
 #
+########################
 
 print("Starting report...",file=sys.stderr)
 
@@ -962,22 +981,22 @@ if 'low input' in caseinfo['exception'].lower():
     jsonout['CNV'] = False
 
 else:
-    jsonout['CNV']['PASS'] = cnvcalls[cnvcalls['filter']=='PASS'].to_dict('split')
+    jsonout['CNV']['PASS'] = cnvs[cnvs['filter']=='PASS'].to_dict('split')
     del jsonout['CNV']['PASS']['index']
 
-    jsonout['CNV']['Filtered'] = cnvcalls[cnvcalls['filter']!='PASS'].to_dict('split')
+    jsonout['CNV']['Filtered'] = cnvs[cnvs['filter']!='PASS'].to_dict('split')
     del jsonout['CNV']['Filtered']['index']
 
-    if cnvcalls[cnvcalls['filter']=='PASS'].shape[0] > 0:
-        print(cnvcalls[cnvcalls['filter']=='PASS'].to_csv(sep='\t',header=True, index=False))
+    if cnvs[cnvs['filter']=='PASS'].shape[0] > 0:
+        print(cnvs[cnvs['filter']=='PASS'].to_csv(sep='\t',header=True, index=False))
     else:
         print("None Detected\n")
 
 
     print("*** FILTERED COPY NUMBER VARIANTS ***\n")
 
-    if cnvcalls[cnvcalls['filter']!='PASS'].shape[0] > 0:
-        print(cnvcalls[cnvcalls['filter']!='PASS'].to_csv(sep='\t',header=True, index=False))
+    if cnvs[cnvs['filter']!='PASS'].shape[0] > 0:
+        print(cnvs[cnvs['filter']!='PASS'].to_csv(sep='\t',header=True, index=False))
     else:
         print("None Detected\n")
 
