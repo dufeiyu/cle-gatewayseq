@@ -155,6 +155,8 @@ caseinfo['casedir'] = args.dir
 caseinfo['exception'] = args.exception
 caseinfo['run_info_str'] = args.runinfostr
 
+caseinfo['date'] = strftime("%Y-%m-%d %H:%M:%S", gmtime())
+
 qcdatafile = args.qcrangejsonfile
 variantdb = args.variantdb
 
@@ -932,11 +934,7 @@ jsonout = {'CASEINFO':{},'VARIANTS':{},'CNV':{},'FUSIONS':{},'QC':{},'MSI':{},'T
 f = open(caseinfo['name'] + ".report.txt", "w")
 sys.stdout = f
 
-dt = strftime("%Y-%m-%d %H:%M:%S", gmtime())
-
-caseinfo['date'] = dt
-
-print("GatewaySeq Report for " + caseinfo['name'] + " ---- Generated on: " + dt + "\n")
+print("GatewaySeq Report for " + caseinfo['name'] + " ---- Generated on: " + caseinfo['date'] + "\n")
 
 print("*** GATEWAY CASE INFORMATION ***\n")
 print("MRN:\t" + caseinfo['mrn'])
