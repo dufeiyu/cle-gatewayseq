@@ -9,7 +9,7 @@ workflow GatewayseqAnalysis {
         String DragenVcfIndex
         String DragenSvVcf
         String DragenSvVcfIndex
-        
+
         String refFasta 
         String ReferenceDict
         String Vepcache
