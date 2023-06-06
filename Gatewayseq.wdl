@@ -11,7 +11,7 @@ workflow Gatewayseq {
         File? DemuxSampleSheet
         String? IlluminaDir
         String? DragenEnv
-        
+
         String CivicCachePath = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl"
 
         String GWSeqRepo
@@ -30,11 +30,10 @@ workflow Gatewayseq {
         String HaplotectBed = GWSeqRepo + "/accessory_files/GWSeq.haplotect.bed"
         String SVGeneList = GWSeqRepo + "/accessory_files/GWSeq.gene_fusions.txt"
         String MSIMicroSatFile = GWSeqRepo + "/accessory_files/GWSeq.microsatellite_file.txt"
-        String MSIRefNormalDir = GWSeqRepo + "/accessory_files/msi_reference"
         String QC_pl = GWSeqRepo + "/scripts/QC_metrics.pl"
 
         String CustomAnnotationParameters = "GWSEQ,vcf,exact,0,BLACKLIST"
-        
+
         String JobGroup
         String OutputDir
         String Queue
@@ -45,15 +44,16 @@ workflow Gatewayseq {
         Int CNVfilterlength
     }
 
-    String DragenReference = "/staging/runs/Chromoseq/refdata/dragen_hg38"
-    String SvNoiseFile = "/staging/runs/Chromoseq/dragen_align_inputs/hg38/WGS_v1.0.0_hg38_sv_systematic_noise.bedpe.gz"
+    String DragenReference = "/storage1/fs1/gtac-mgi/Active/CLE/reference/dragen_hg38"
+    String SvNoiseFile     = "/storage1/fs1/gtac-mgi/Active/CLE/reference/dragen_align_inputs/hg38/WGS_v1.0.0_hg38_sv_systematic_noise.bedpe.gz"
     String Reference       = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.fa"
     String ReferenceDict   = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.dict"
 
-    String VEP          = "/storage1/fs1/gtac-mgi/Active/CLE/reference/VEP_cache"
-    String NirvanaDB    = "/storage1/fs1/gtac-mgi/Active/CLE/reference/dragen_align_inputs/hg38/nirvana_annotation_data"
+    String VEP             = "/storage1/fs1/gtac-mgi/Active/CLE/reference/VEP_cache"
+    String NirvanaDB       = "/storage1/fs1/gtac-mgi/Active/CLE/reference/dragen_align_inputs/hg38/nirvana_annotation_data"
+    String MSIRefNormalDir = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/MSI_normal_reference"
 
-    String DemuxFastqDir = "/storage1/fs1/gtac-mgi/Active/CLE/assay/gatewayseq/demux_fastq"
+    String DemuxFastqDir   = "/storage1/fs1/gtac-mgi/Active/CLE/assay/gatewayseq/demux_fastq"
 
     call update_local_civic_cache {
         input: CivicCachePath=CivicCachePath,

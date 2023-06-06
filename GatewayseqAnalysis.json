@@ -12,8 +12,8 @@
     "GatewayseqAnalysis.ReferenceDict":"/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.dict",
     "GatewayseqAnalysis.CivicCachePath":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl",
     "GatewayseqAnalysis.Vepcache":"/storage1/fs1/gtac-mgi/Active/CLE/reference/VEP_cache",
-    "GatewayseqAnalysis.VariantDB":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/gwseq.db",
-    "GatewayseqAnalysis.GWSeqRepo":"/storage1/fs1/dspencer/Active/spencerlab/dhs/git/cle-gatewayseq",
+    "GatewayseqAnalysis.VariantDB":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/variantDB/gwseq.db",
+    "GatewayseqAnalysis.GWSeqRepo":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq",
     "GatewayseqAnalysis.JobGroup":"/cle/wdl/haloplex",
     "GatewayseqAnalysis.Queue":"gtac-mgi"
 }
