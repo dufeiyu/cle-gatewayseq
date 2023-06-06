@@ -18,11 +18,11 @@ use JSON;
 use IO::File;
 use List::Util qw(first);
 
-die "Provide myeloseq output dir" unless @ARGV and @ARGV == 1;
+die "Provide GatewaySeq workflow output dir" unless @ARGV and @ARGV == 1;
 my $dir = $ARGV[0];
 
 unless (-d $dir) {
-    die "myeloseq output dir: $dir not existing";
+    die "GatewaySeq workflow output dir: $dir not existing";
 }
 
 my %group1 = (

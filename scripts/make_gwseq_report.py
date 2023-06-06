@@ -155,7 +155,7 @@ caseinfo['casedir'] = args.dir
 caseinfo['exception'] = args.exception
 caseinfo['run_info_str'] = args.runinfostr
 
-caseinfo['date'] = strftime("%Y-%m-%d %H:%M:%S", gmtime())
+caseinfo['date'] = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
 
 qcdatafile = args.qcrangejsonfile
 variantdb = args.variantdb
