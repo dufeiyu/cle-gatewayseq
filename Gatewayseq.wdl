@@ -11,14 +11,30 @@ workflow Gatewayseq {
         File? DemuxSampleSheet
         String? IlluminaDir
         String? DragenEnv
+        
+        String CivicCachePath = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl"
 
-        String CNVNormFile
-        String CNVSegBed
-        String CoverageBed
-        String GeneCoverageBed
-        String OtherCoverageBed
-        String SVGeneList
-        String CivicCachePath
+        String GWSeqRepo
+
+        String? VariantDB
+
+        # set inputs based on git repo
+        String CoverageBed = GWSeqRepo + "/accessory_files/GWSeq.all.hg38.bed"
+        String CNVNormFile = GWSeqRepo + "/accessory_files/GWSeq.panel_of_normals.list"
+        String CNVSegBed = GWSeqRepo + "/accessory_files/GWSeq.seg_all_genes.bed"
+        String GeneCoverageBed = GWSeqRepo + "/accessory_files/GWSeq.genes.hg38.bed" 
+        String OtherCoverageBed = GWSeqRepo + "/accessory_files/GWSeq.other.hg38.bed"
+        String CustomAnnotationVcf = GWSeqRepo + "/accessory_files/GWSeq.custom_annotations.vcf.gz"
+        String CustomAnnotationIndex = GWSeqRepo + "/accessory_files/GWSeq.custom_annotations.vcf.gz.tbi"
+        String QcMetrics = GWSeqRepo + "/accessory_files/GWSeq.QCMetrics.json"
+        String HaplotectBed = GWSeqRepo + "/accessory_files/GWSeq.haplotect.bed"
+        String SVGeneList = GWSeqRepo + "/accessory_files/GWSeq.gene_fusions.txt"
+        String MSIMicroSatFile = GWSeqRepo + "/accessory_files/GWSeq.microsatellite_file.txt"
+        String MSIRefNormalDir = GWSeqRepo + "/accessory_files/msi_reference"
+        String QC_pl = GWSeqRepo + "/scripts/QC_metrics.pl"
+
+        String CustomAnnotationParameters = "GWSEQ,vcf,exact,0,BLACKLIST"
+        
         String JobGroup
         String OutputDir
         String Queue
@@ -30,22 +46,14 @@ workflow Gatewayseq {
     }
 
     String DragenReference = "/staging/runs/Chromoseq/refdata/dragen_hg38"
+    String SvNoiseFile = "/staging/runs/Chromoseq/dragen_align_inputs/hg38/WGS_v1.0.0_hg38_sv_systematic_noise.bedpe.gz"
     String Reference       = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.fa"
     String ReferenceDict   = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.dict"
 
     String VEP          = "/storage1/fs1/gtac-mgi/Active/CLE/reference/VEP_cache"
     String NirvanaDB    = "/storage1/fs1/gtac-mgi/Active/CLE/reference/dragen_align_inputs/hg38/nirvana_annotation_data"
-    String QcMetrics    = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/GatewaySeqQCMetrics.json"
-    String HaplotectBed = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/myeloseq.haplotect_snppairs_hg38.041718.bed"
 
-    String SvNoiseFile = "/staging/runs/Chromoseq/dragen_align_inputs/hg38/WGS_v1.0.0_hg38_sv_systematic_noise.bedpe.gz"
-
-    String MSIMicroSatFile = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/accessory_files/microsatellite_file.hg38-1.gws"
-    String MSIRefNormalDir = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/test/MSI/normal_ref_dir"
-
-    String QC_pl = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/scripts/QC_metrics.pl"
     String DemuxFastqDir = "/storage1/fs1/gtac-mgi/Active/CLE/assay/gatewayseq/demux_fastq"
-
 
     call update_local_civic_cache {
         input: CivicCachePath=CivicCachePath,
@@ -106,11 +114,13 @@ workflow Gatewayseq {
 
         call subWF.GatewayseqAnalysis {
             input: Name=samples[1],
+                   GWSeqRepo=GWSeqRepo,
                    refFasta=Reference,
                    ReferenceDict=ReferenceDict,
                    HaplotectBed=HaplotectBed,
                    CivicCachePath=CivicCachePath,
                    Vepcache=VEP,
+                   VariantDB=VariantDB,
                    CoverageBed=CoverageBed,
                    SVGeneList=SVGeneList,
                    QcMetrics=QcMetrics,

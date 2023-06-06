@@ -9,16 +9,26 @@ workflow GatewayseqAnalysis {
         String DragenVcfIndex
         String DragenSvVcf
         String DragenSvVcfIndex
-
+        
         String refFasta 
         String ReferenceDict
         String Vepcache
-
-        String QcMetrics
-        String CoverageBed
-        String HaplotectBed
-        String SVGeneList
         String CivicCachePath
+
+        String? VariantDB
+
+        String GWSeqRepo                
+
+        String CoverageBed = GWSeqRepo + "/accessory_files/GWSeq.all.hg38.bed"
+        String CustomAnnotationVcf = GWSeqRepo + "/accessory_files/GWSeq.custom_annotations.vcf.gz"
+        String CustomAnnotationIndex = CustomAnnotationVcf + ".tbi"
+        String QcMetrics = GWSeqRepo + "/accessory_files/GWSeq.QCMetrics.json"
+        String HaplotectBed = GWSeqRepo + "/accessory_files/GWSeq.haplotect.bed"
+        String SVGeneList = GWSeqRepo + "/accessory_files/GWSeq.gene_fusions.txt"
+        # this is a static parameter. Shouldnt need to change
+        String CustomAnnotationParameters = "GWSEQ,vcf,exact,0,BLACKLIST"
+
+        String MakeReportPy = GWSeqRepo + "/scripts/make_gwseq_report.py"
 
         String SubDir
         String OutputDir
@@ -42,6 +52,9 @@ workflow GatewayseqAnalysis {
         input: Vcf=run_civic.vcf,
                refFasta=refFasta,
                Vepcache=Vepcache,
+               CustomAnnotationVcf=CustomAnnotationVcf,
+               CustomAnnotationIndex=CustomAnnotationIndex,
+               CustomAnnotationParameters=CustomAnnotationParameters,
                Name=Name,
                queue=Queue,
                jobGroup=JobGroup
@@ -92,9 +105,8 @@ workflow GatewayseqAnalysis {
     call make_report {
         input: order_by=gather_files.done,
                Name=Name,
-               CoverageBed=CoverageBed,
-               SVGeneList=SVGeneList,
-               QcMetrics=QcMetrics,
+               VariantDB=VariantDB,
+               MakeReportPy=MakeReportPy,
                OutputDir=OutputDir,
                SubDir=SubDir,
                queue=Queue,
@@ -137,6 +149,11 @@ task run_vep {
          File Vcf
          String refFasta
          String Vepcache
+
+         String CustomAnnotationVcf
+         String CustomAnnotationIndex
+         String CustomAnnotationParameters
+
          Float? maxAF
          String Name
          String jobGroup
@@ -146,7 +163,7 @@ task run_vep {
          /usr/local/bin/tabix -p vcf ${Vcf} && \
          /usr/bin/perl -I /opt/vep/lib/perl/VEP/Plugins /opt/vep/src/ensembl-vep/vep --format vcf \
          --vcf --plugin Downstream --fasta ${refFasta} --hgvs --symbol --term SO --flag_pick \
-         -i ${Vcf} --offline --cache --max_af --dir ${Vepcache} -o ${Name}.annotated.vcf && \
+         -i ${Vcf} --custom ${CustomAnnotationVcf},${CustomAnnotationParameters} --offline --cache --max_af --dir ${Vepcache} -o ${Name}.annotated.vcf && \
          /usr/local/bin/bgzip ${Name}.annotated.vcf && /usr/local/bin/tabix -p vcf ${Name}.annotated.vcf.gz
      }
      runtime {
@@ -175,7 +192,7 @@ task filter_sv {
     }
 
     command {
-        bcftools view -i 'SVTYPE=="BND" && FMT/SR[0:1]>=${MinReads}' -Oz -o ${Name}.sv.filtered.vcf.gz ${Vcf} && \
+        bcftools view -i 'FMT/SR[0:1]>=${MinReads}' -Oz -o ${Name}.sv.filtered.vcf.gz ${Vcf} && \
         tabix -p vcf ${Name}.sv.filtered.vcf.gz
     }
 
@@ -207,7 +224,7 @@ task annotate_sv {
 
     command {
         /usr/bin/perl -I /opt/vep/lib/perl/VEP/Plugins /opt/vep/src/ensembl-vep/vep --format vcf --vcf --fasta ${refFasta} \
-        --flag_pick --per_gene --symbol --term SO -o ${Name}.sv_annotated.vcf -i ${Vcf} --offline --cache --dir ${Vepcache} && \
+        --flag_pick --symbol --term SO -o ${Name}.sv_annotated.vcf -i ${Vcf} --offline --cache --dir ${Vepcache} && \
         /usr/local/bin/bgzip ${Name}.sv_annotated.vcf && /usr/local/bin/tabix -p vcf ${Name}.sv_annotated.vcf.gz
     }
 
@@ -288,9 +305,8 @@ task make_report {
      input {
          String order_by
          String Name
-         String CoverageBed
-         String SVGeneList
-         String QcMetrics
+         String? VariantDB
+         String MakeReportPy
          String OutputDir
          String SubDir
          String queue
@@ -300,7 +316,7 @@ task make_report {
      String SampleOutDir = OutputDir + "/" + SubDir
 
      command {
-         /usr/bin/python3 /storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq/scripts/make_gwseq_report.py -n ${Name} -d ${SampleOutDir} -l ${SVGeneList} -q ${QcMetrics} && \
+         /usr/bin/python3 ${MakeReportPy} -n ${Name} -d ${SampleOutDir} ${'--variantdb ' + VariantDB} && \
          /bin/mv ./*.report.txt ./*.report.json ${SampleOutDir}
      }
      runtime {
