@@ -8,6 +8,7 @@
     "Gatewayseq.CivicCachePath":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl",
     "Gatewayseq.VariantDB":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/variantDB/gwseq.db",
     "Gatewayseq.GWSeqRepo":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq",
+    "Gatewayseq.RmRunDir":"true",
     "Gatewayseq.JobGroup":"/cle/wdl/haloplex",
     "Gatewayseq.DragenDockerImage":"docker1(seqfu/centos7-dragen-4.0.3)",
     "Gatewayseq.DragenQueue":"duncavagee",

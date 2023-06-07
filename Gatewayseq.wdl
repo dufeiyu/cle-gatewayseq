@@ -42,6 +42,8 @@ workflow Gatewayseq {
 
         Int readfamilysize
         Int CNVfilterlength
+
+        Boolean RmRunDir
     }
 
     String DragenReference = "/storage1/fs1/gtac-mgi/Active/CLE/reference/dragen_hg38"
@@ -156,11 +158,13 @@ workflow Gatewayseq {
                    jobGroup=JobGroup
         }
 
-        call remove_rundir {
-             input: order_by=GatewayseqAnalysis.all_done,
-                    rundir=IlluminaDir,
-                    queue=DragenQueue,
-                    jobGroup=JobGroup
+        if (RmRunDir) {
+            call remove_rundir {
+                 input: order_by=GatewayseqAnalysis.all_done,
+                        rundir=IlluminaDir,
+                        queue=DragenQueue,
+                        jobGroup=JobGroup
+            }
         }
     }
 }
