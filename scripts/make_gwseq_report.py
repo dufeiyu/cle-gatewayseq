@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import sys, os, re, tempfile, csv, pysam, json, binascii, argparse
+import sys, os, re, tempfile, csv, pysam, json, binascii, argparse, subprocess
 import sqlite3
 import pandas as pd
 import pyranges as pr
@@ -8,6 +8,16 @@ import numpy as np
 from time import gmtime, strftime
 from cyvcf2 import VCF
 from pathlib import Path
+
+def get_latest_tag(git_directory):
+    command = ['git', '--git-dir', os.path.join(git_directory,".git"), 'describe', '--tags', '--abbrev=0']
+    try:
+        output = subprocess.check_output(command, stderr=subprocess.STDOUT).decode().strip()
+        return output
+    except subprocess.CalledProcessError as e:
+        # Handle the case when no tags are found or an error occurs
+        print(f"Error: {e.output.decode()}")
+        return None
 
 def revcomp(dna):
     complement = {"A": "T", "T": "A", "C": "G", "G": "C"}  # DNA complement pairs
@@ -146,6 +156,7 @@ args = parser.parse_args()
 repoLocation = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
 caseinfo = {}
+caseinfo['version'] = get_latest_tag(repoLocation)
 caseinfo['name'] = args.name
 caseinfo['mrn'] = args.mrn
 caseinfo['DOB'] = args.DOB
@@ -154,7 +165,6 @@ caseinfo['specimen'] = args.specimen
 caseinfo['casedir'] = args.dir
 caseinfo['exception'] = args.exception
 caseinfo['run_info_str'] = args.runinfostr
-
 caseinfo['date'] = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
 
 qcdatafile = args.qcrangejsonfile
@@ -1098,7 +1108,7 @@ jsonout['QC']['HAPLOTECT SUMMARY'].pop('index', None)
 jsonout['QC']['HAPLOTECT LOCI'] = haplotectlocidf.iloc[:,1:].to_dict('split')
 jsonout['QC']['HAPLOTECT LOCI'].pop('index', None)
 
-print("*** GatewaySeq Assay Version " + str(qcranges["ASSAY VERSION"]) + " ***\n")
+print("*** GatewaySeq Assay Version " + str(caseinfo["version"]) + " ***\n")
 
 print(qcranges["DISCLAIMER"])
 
