@@ -170,6 +170,10 @@ caseinfo['date'] = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
 qcdatafile = args.qcrangejsonfile
 variantdb = args.variantdb
 
+# if the case is a positive control, then do not update the variant database
+if 'POSITIVE' in caseinfo['exception'].upper():
+    variantdb = None
+
 if not qcdatafile:
     qcdatafile = os.path.join(repoLocation,"accessory_files/GWSeq.QCMetrics.json")
 
@@ -289,7 +293,7 @@ else:
 #########################################
 
 # this is for dragen/umi metrics
-qcdf = pd.DataFrame(columns=['metric','value','percent'])
+qcdf = pd.DataFrame(columns=['metric','value','qcmetric'])
 
 # this is for exon/gene coverage metrics
 covqcdf = pd.DataFrame(columns=['Gene','Type','Region','Mean','Covered1','Covered2'])
@@ -341,23 +345,30 @@ print("Collecting DRAGEN qc metrics...",file=sys.stderr)
 
 # read in mapping metrics
 df = pd.read_csv(mappingmetrics,sep=',',names=['group','readgroup','metric','value','percent'])
-df = df[df['group']=='MAPPING/ALIGNING SUMMARY'].drop(columns='readgroup')
+df = df[df['group']=='MAPPING/ALIGNING SUMMARY'].drop(columns='readgroup').copy()
 df['metric'] = df['group'] + ': ' + df['metric']
 df = df.drop(columns='group')
-dfpct = df[df['percent']==df['percent']].copy()
+dfpct = df[df['percent'].notna()].copy()
+df = df.drop(columns='percent')
 dfpct['metric'] = dfpct['metric'].apply(lambda x: x + ' (%)')
 dfpct['value'] = dfpct['percent']
 dfpct = dfpct.drop(columns='percent')
+
+df['qcmetric'] = 0
+df.loc[df['metric'].isin(qcranges.keys()),'qcmetric'] = 1
 qcdf = pd.concat([qcdf,df])
+dfpct['qcmetric'] = 0
+dfpct.loc[dfpct['metric'].isin(qcranges.keys()),'qcmetric'] = 1
 qcdf = pd.concat([qcdf,dfpct])
 
 # read in umi metrics
 df = pd.read_csv(umimetrics,sep=',',names=['group','readgroup','metric','value','percent'])
 df['group'] = 'UMI SUMMARY'
-df = df.drop(columns='readgroup')
+df = df.drop(columns='readgroup').copy()
 df['metric'] = df['group'] + ': ' + df['metric']
 df = df.drop(columns='group')
-dfpct = df[df['percent']==df['percent']].copy()
+dfpct = df[df['percent'].notna()].copy()
+df = df.drop(columns='percent')
 dfpct['metric'] = dfpct['metric'].apply(lambda x: x + ' (%)')
 dfpct['value'] = dfpct['percent']
 dfpct = dfpct.drop(columns='percent')
@@ -366,19 +377,29 @@ duplicateReads = round(100-consensusReads,1)
 
 dfpct = pd.concat([dfpct,pd.DataFrame.from_dict({0:['UMI SUMMARY: Consensus reads (%)',consensusReads],1:['UMI SUMMARY: Duplicate reads (%)',duplicateReads]},orient='index',columns=['metric','value'])],axis=0)
 
+df['qcmetric'] = 0
+df.loc[df['metric'].isin(qcranges.keys()),'qcmetric'] = 1
 qcdf = pd.concat([qcdf,df])
+dfpct['qcmetric'] = 0
+dfpct.loc[dfpct['metric'].isin(qcranges.keys()),'qcmetric'] = 1
 qcdf = pd.concat([qcdf,dfpct])
     
 # read in target metrics
 df = pd.read_csv(targetmetrics,sep=',',names=['group','readgroup','metric','value','percent'])
-df = df.drop(columns='readgroup')
+df = df.drop(columns='readgroup').copy()
 df['metric'] = df['group'] + ': ' + df['metric']
-df = df.drop(columns='group')
-dfpct = df[df['percent']==df['percent']].copy()
+df = df.drop(columns='group').copy()
+dfpct = df[df['percent'].notna()].copy()
+df = df.drop(columns='percent')
 dfpct['metric'] = dfpct['metric'].apply(lambda x: x + ' (%)')
 dfpct['value'] = dfpct['percent']
 dfpct = dfpct.drop(columns='percent')
+
+df['qcmetric'] = 0
+df.loc[df['metric'].isin(qcranges.keys()),'qcmetric'] = 1
 qcdf = pd.concat([qcdf,df])
+dfpct['qcmetric'] = 0
+dfpct.loc[dfpct['metric'].isin(qcranges.keys()),'qcmetric'] = 1
 qcdf = pd.concat([qcdf,dfpct])
 
 # get coverage file
@@ -387,8 +408,8 @@ fullResCovPr = pr.PyRanges(pd.read_csv(coveragebed, header=None, names="Chromoso
 ntAtCovlevel1 = sum(fullResCovPr[fullResCovPr.Coverage>minTargetCoverage[0]].lengths())
 ntAtCovlevel2 = sum(fullResCovPr[fullResCovPr.Coverage>minTargetCoverage[1]].lengths())
 
-qcdf.loc[len(qcdf.index)] = ['COVERAGE SUMMARY: Target at ' + str(minTargetCoverage[0]) + 'x (%)', ntAtCovlevel1/sum(fullResCovPr.lengths())*100, '']
-qcdf.loc[len(qcdf.index)] = ['COVERAGE SUMMARY: Target at ' + str(minTargetCoverage[1]) + 'x (%)', ntAtCovlevel2/sum(fullResCovPr.lengths())*100, '']
+qcdf.loc[len(qcdf.index)] = ['COVERAGE SUMMARY: Target at ' + str(minTargetCoverage[0]) + 'x (%)', ntAtCovlevel1/sum(fullResCovPr.lengths())*100,1]
+qcdf.loc[len(qcdf.index)] = ['COVERAGE SUMMARY: Target at ' + str(minTargetCoverage[1]) + 'x (%)', ntAtCovlevel2/sum(fullResCovPr.lengths())*100,1]
 
 ####################
 #
@@ -409,7 +430,7 @@ haplotectlocidf = haplotectlocidf.iloc[:, :-1]
 if variantdb is not None:
     df = haplotectdf.transpose().reset_index().drop(index=0)
     df.columns = ['metric','value']
-    df['percent'] = 'NA'
+    df['qcmetric'] = 1
     dbUpdateVariants(dbcon,'qcdata',caseinfo,pd.concat([qcdf,df]))
     if args.noupdate is False:
         dbUpdateVariants(dbcon,'haplotectloci',caseinfo,haplotectlocidf)
@@ -592,7 +613,7 @@ for variant in vcf:
                 psyntax = convert_aa(psyntax[1])
                 psyntax = re.sub("\%3D","=",psyntax)
             else:
-                psyntax = consequence
+                psyntax = csyntax
         
             impact = csq[vep['IMPACT']]
             exon = csq[vep['EXON']] or 'NA'
