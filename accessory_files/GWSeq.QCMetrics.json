@@ -3,7 +3,7 @@
     "MAPPING/ALIGNING SUMMARY: Total input reads": "8000000,",
     "MAPPING/ALIGNING SUMMARY: Mismatched bases R1 (%)": ",0.9",
     "MAPPING/ALIGNING SUMMARY: Mismatched bases R2 (%)": ",0.9",
-    "MAPPING/ALIGNING SUMMARY: Q30 bases (%)": ".8,",
+    "MAPPING/ALIGNING SUMMARY: Q30 bases (%)": "80,",
     "MAPPING/ALIGNING SUMMARY: Mapped reads (%)": "98,",
     "MAPPING/ALIGNING SUMMARY: Insert length: mean": "170,",
     "UMI SUMMARY: Duplicate reads (%)": ",42",
