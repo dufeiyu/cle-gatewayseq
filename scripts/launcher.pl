@@ -27,9 +27,8 @@ my ($rundir, $sample_sheet, $batch_name) = @ARGV;
 die "$rundir is not valid" unless -d $rundir;
 die "$sample_sheet is not valid" unless -s $sample_sheet;
 
-my $dir = '/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/test';
-#my $git_dir = File::Spec->join($dir, 'process', 'git', 'cle-gatewayseq');
-my $git_dir = '/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq';
+my $dir = '/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq';
+my $git_dir = File::Spec->join($dir, 'process', 'git', 'cle-gatewayseq');
 
 my $conf = File::Spec->join($git_dir, 'application.conf');
 my $wdl  = File::Spec->join($git_dir, 'Gatewayseq.wdl');
@@ -37,17 +36,21 @@ my $zip  = File::Spec->join($git_dir, 'imports.zip');
 my $json_template = File::Spec->join($git_dir, 'Gatewayseq.json');
 
 my $group  = '/cle/wdl/haloplex';
-my $queue  = 'pathology';
+my $queue  = 'dspencer';
 my $docker = 'registry.gsc.wustl.edu/apipe-builder/genome_perl_environment:compute1-38';
 
 my $user_group = 'compute-duncavagee';
 
-my $out_dir = File::Spec->join($dir, $batch_name);
+my $out_dir = File::Spec->join($dir, 'batchdir', $batch_name);
 unless (-d $out_dir) {
     unless (mkdir $out_dir) {
         die "Failed to make directory $out_dir";
     }
 }
+
+#parsing CoPath dump for MRN, ACCESSION, DOB and Gender
+my $copath_dump = '/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/daily_accession/WML_Daily_Accession_Log_CLE.csv';
+my %hash = get_info_hash($copath_dump);
 
 #parse sample spreadsheet
 my $data = Spreadsheet::Read->new($sample_sheet);
@@ -66,17 +69,56 @@ for my $row ($sheet->rows()) {
     }
     my ($lane, $flowcell, $lib, $index, $exception) = @$row;
 
+    if ($exception) {
+        $exception =~ s/^\s+//;
+        $exception =~ s/\s+$//;$exception =~ s/,\s+/,/g;
+        $exception =~ s/,\s+/,/g;
+        $exception =~ s/\s+,/,/g;
+        $exception =~ s/\s+/_/g;
+    }
+
     $lib =~ s/\s+//g;
-    my ($name) = $lib =~ /^(\S+)\-lib/;
+    my ($name, $mrn, $accession) = $lib =~ /^([A-Z]{4}\-(\d+)\-([A-Z]\d+\-\d+)\-[A-Z0-9]+)\-lib/;
+    my $id = ($exception and $exception =~ /RESEARCH/) ? 'NONE' : $mrn.'_'.$accession;
+
+    ($name) = $lib =~ /^(\S+)\-lib/ if $lib =~ /^H_|Research|Clinical|Positive\-Control/;
+
+    unless ($id eq 'NONE') {
+        unless ($mrn and $accession) {
+            die "Library name: $lib must contain MRN, accession id and specimen type";
+        }
+
+        unless (exists $hash{$id}) {
+            die "FAIL to find matching $mrn and $accession from CoPath dump for library: $lib";
+        }
+    }
+
+    my $DOB;
+
+    if ($id eq 'NONE') {
+        ($mrn, $accession, $DOB) = ('NONE') x 3;
+    }
+    else {
+        $DOB = $hash{$id};
+    }
+
+    if ($exception) {
+        if ($exception =~ /RESEARCH/) {
+            $exception =~ s/,?RESEARCH,?//;
+            $exception = 'NONE' if $exception =~ /^\s*$/;
+        }
+    }
+    else {
+        $exception = 'NONE';
+    }
 
     my ($index1, $index2) = $index =~ /([ATGC]{10})\-([ATGC]{10})/;
     my $fix_index2 = rev_comp($index2);
     
-    $exception = 'NONE' unless $exception;
-    
     $ds_str .= join ',', $lane, $lib, $lib, '', $index1, $fix_index2;
     $ds_str .= "\n";
-    $si_str .= join "\t", $index1.'-'.$fix_index2, $lib, $seq_id, $flowcell, $lane, $lib, $name;
+    #index  name  RG_ID  RG_FLOWCELL  RG_LANE  RG_LIB  RG_SAMPLE MRN ACCESSION DOB EXCEPTION
+    $si_str .= join "\t", $index1.'-'.$fix_index2, $lib, $seq_id, $flowcell, $lane, $lib, $name, $mrn, $accession, $DOB, $exception;
     $si_str .= "\n";
 
     $seq_id++;
@@ -101,7 +143,7 @@ my $si_fh = IO::File->new(">$si") or die "Fail to write to $si";
 $si_fh->print($si_str);
 $si_fh->close;
 
-## Get RunInfoString
+## Get RunInfoStr
 my $run_xml = File::Spec->join($rundir, 'RunParameters.xml');
 unless (-s $run_xml) {
     die "RunParameters.xml $run_xml is not valid";
@@ -148,7 +190,7 @@ $inputs->{'Gatewayseq.OutputDir'}        = $out_dir;
 $inputs->{'Gatewayseq.IlluminaDir'}      = $rundir;
 $inputs->{'Gatewayseq.SampleSheet'}      = $si;
 $inputs->{'Gatewayseq.DemuxSampleSheet'} = $dragen_ss;
-#$inputs->{'Gatewayseq.RunInfoString'}    = $run_info_str;
+$inputs->{'Gatewayseq.RunInfoStr'}       = $run_info_str;
 
 my $input_json = File::Spec->join($out_dir, 'Gatewayseq.json');
 my $json_fh = IO::File->new(">$input_json") or die "fail to write to $input_json";
@@ -170,4 +212,26 @@ sub rev_comp {
     $revcomp =~ tr/ATGCatgc/TACGtacg/;
 
     return $revcomp;
+}
+
+sub get_info_hash {
+    my $file = shift;
+    my $dump_fh = IO::File->new($file) or die "fail to open $file for reading";
+    my %info_hash;
+
+    while (my $l = $dump_fh->getline) {
+        next if $l =~ /^(Accession|,,,,)/;
+        next unless $l =~ /GatewaySeq\s/;
+
+        chomp $l;
+        $l =~ s/\r//g;
+
+        my @columns = split /,/, $l;
+        my $id  = $columns[2].'_'.$columns[0];
+
+        $info_hash{$id} = $columns[5];
+    }
+    $dump_fh->close;
+
+    return %info_hash;
 }

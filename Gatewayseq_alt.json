@@ -3,6 +3,7 @@
     "Gatewayseq.SampleSheet":"",
     "Gatewayseq.OutputDir":"",
     "Gatewayseq.IlluminaDir":"",
+    "Gatewayseq.RunInfoStr":"",
     "Gatewayseq.CivicCachePath":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl",
     "Gatewayseq.VariantDB":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/variantDB/gwseq.db",
     "Gatewayseq.GWSeqRepo":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq",
