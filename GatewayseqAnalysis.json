@@ -1,5 +1,10 @@
 {	
     "GatewayseqAnalysis.Name":"",
+    "GatewayseqAnalysis.MRN":"",
+    "GatewayseqAnalysis.DOB":"",
+    "GatewayseqAnalysis.Accession":"",
+    "GatewayseqAnalysis.Exception":"",
+    "GatewayseqAnalysis.RunInfoStr":"",
     "GatewayseqAnalysis.SubDir":"",
     "GatewayseqAnalysis.OutputDir":"",
     "GatewayseqAnalysis.DragenCram":"",

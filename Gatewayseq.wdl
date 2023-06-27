@@ -6,7 +6,7 @@ workflow Gatewayseq {
     input {
         File SampleSheet
         # sample sheet has this structure:
-        # index  name  RG_ID  RG_FLOWCELL  RG_LANE  RG_LIB  RG_SAMPLE [R1] [R2]
+        # index  name  RG_ID  RG_FLOWCELL  RG_LANE  RG_LIB  RG_SAMPLE MRN ACCESSION DOB EXCEPTION [R1] [R2]
 
         File? DemuxSampleSheet
         String? IlluminaDir
@@ -15,6 +15,7 @@ workflow Gatewayseq {
         String CivicCachePath = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl"
 
         String GWSeqRepo
+        String RunInfoStr
 
         String? VariantDB
 
@@ -85,12 +86,12 @@ workflow Gatewayseq {
 
     Array[Array[String]] inputData = read_tsv(select_first([prepare_samples.sample_sheet,SampleSheet]))
 
-    # the inputdata should be: index  name  RG_ID  RG_FLOWCELL  RG_LANE  RG_LIB  RG_SAMPLE read1path read2path
+    # the inputdata should be: index  name  RG_ID  RG_FLOWCELL  RG_LANE  RG_LIB  RG_SAMPLE MRN ACCESSION DOB EXCEPTION read1path read2path
     scatter (samples in inputData){
         call dragen_align {
             input: DragenRef=DragenReference,
-                   fastq1=samples[7],
-                   fastq2=samples[8],
+                   fastq1=samples[11],
+                   fastq2=samples[12],
                    Name=samples[1],
                    RG=samples[3] + '.' + samples[4] + '.' + samples[0],
                    SM=samples[6],
@@ -116,6 +117,11 @@ workflow Gatewayseq {
 
         call subWF.GatewayseqAnalysis {
             input: Name=samples[1],
+                   MRN=samples[7],
+                   Accession=samples[8],
+                   DOB=samples[9],
+                   Exception=samples[10],
+                   RunInfoStr=RunInfoStr,
                    GWSeqRepo=GWSeqRepo,
                    refFasta=Reference,
                    ReferenceDict=ReferenceDict,

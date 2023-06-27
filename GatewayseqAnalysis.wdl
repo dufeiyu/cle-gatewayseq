@@ -3,6 +3,12 @@ version 1.0
 workflow GatewayseqAnalysis {
     input {
         String Name
+        String MRN
+        String Accession
+        String DOB
+        String Exception
+        String RunInfoStr
+
         String DragenCram
         String DragenCramIndex
         String DragenVcf
@@ -105,6 +111,11 @@ workflow GatewayseqAnalysis {
     call make_report {
         input: order_by=gather_files.done,
                Name=Name,
+               MRN=MRN,
+               DOB=DOB,
+               Accession=Accession,
+               Exception=Exception,
+               RunInfoStr=RunInfoStr,
                VariantDB=VariantDB,
                MakeReportPy=MakeReportPy,
                OutputDir=OutputDir,
@@ -305,6 +316,11 @@ task make_report {
      input {
          String order_by
          String Name
+         String MRN
+         String Accession
+         String DOB
+         String Exception
+         String RunInfoStr
          String? VariantDB
          String MakeReportPy
          String OutputDir
@@ -316,7 +332,7 @@ task make_report {
      String SampleOutDir = OutputDir + "/" + SubDir
 
      command {
-         /usr/bin/python3 ${MakeReportPy} -n ${Name} -d ${SampleOutDir} ${'--variantdb ' + VariantDB} && \
+         /usr/bin/python3 ${MakeReportPy} -n ${Name} -m ${MRN} -a ${Accession} -b ${DOB} -e ${Exception} -i ${RunInfoStr} -d ${SampleOutDir} ${'--variantdb ' + VariantDB} && \
          /bin/mv ./*.report.txt ./*.report.json ${SampleOutDir}
      }
      runtime {

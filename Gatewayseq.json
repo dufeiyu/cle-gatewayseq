@@ -3,6 +3,7 @@
     "Gatewayseq.SampleSheet":"PATH",
     "Gatewayseq.OutputDir":"",
     "Gatewayseq.IlluminaDir":"",
+    "Gatewayseq.RunInfoStr":"",
     "Gatewayseq.readfamilysize":1,
     "Gatewayseq.CNVfilterlength":5000,
     "Gatewayseq.CivicCachePath":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl",
