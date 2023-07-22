@@ -55,6 +55,8 @@ workflow Gatewayseq {
     String NirvanaDB       = "/storage1/fs1/gtac-mgi/Active/CLE/reference/dragen_align_inputs/hg38/nirvana_annotation_data"
     String MSIRefNormalDir = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/MSI_normal_reference"
 
+    String CoverageThresholds = "100,250,500,1000,1500,2000"
+
     String DemuxFastqDir   = "/storage1/fs1/gtac-mgi/Active/CLE/assay/gatewayseq/demux_fastq"
 
     call update_local_civic_cache {
@@ -103,6 +105,7 @@ workflow Gatewayseq {
                    CoverageBed=CoverageBed,
                    GeneCoverageBed=GeneCoverageBed,
                    OtherCoverageBed=OtherCoverageBed,
+                   CoverageThresholds=CoverageThresholds,
                    SvNoiseFile=SvNoiseFile,
                    MSIMicroSatFile=MSIMicroSatFile,
                    MSIRefNormalDir=MSIRefNormalDir,
@@ -270,6 +273,7 @@ task dragen_align {
          String CoverageBed
          String GeneCoverageBed
          String OtherCoverageBed
+         String CoverageThresholds
          String SvNoiseFile
          String MSIMicroSatFile
          String MSIRefNormalDir
@@ -303,8 +307,9 @@ task dragen_align {
          /bin/mkdir ${outdir} && \
          /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} \
          --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --umi-metrics-interval-file ${CoverageBed} \
-         --enable-map-align true --enable-sort true --enable-map-align-output true --gc-metrics-enable=true \
-         --qc-coverage-ignore-overlaps=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res cov_report --qc-coverage-region-2 ${OtherCoverageBed} \
+         --enable-map-align true --enable-sort true --enable-map-align-output true --gc-metrics-enable=true --qc-coverage-ignore-overlaps=true \
+         --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res cov_report --qc-coverage-region-1-thresholds ${CoverageThresholds} \
+         --qc-coverage-region-2 ${OtherCoverageBed} --qc-coverage-region-2-thresholds ${CoverageThresholds} \
          --enable-variant-caller=true --vc-target-bed ${GeneCoverageBed} --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 \
          --vc-enable-orientation-bias-filter true --vc-enable-triallelic-filter false \
          --enable-sv true --sv-exome true --sv-output-contigs true --sv-systematic-noise ${SvNoiseFile} --sv-hyper-sensitivity true \
