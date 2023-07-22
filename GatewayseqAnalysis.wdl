@@ -1,83 +1,55 @@
+version 1.0
+
 workflow GatewayseqAnalysis {
+    input {
+        String Name
+        String DragenCram
+        String DragenCramIndex
+        String DragenVcf
+        String DragenVcfIndex
+        String DragenSvVcf
+        String DragenSvVcfIndex
 
-    String Cram
-    String CramIndex
-    String Name
-    
-    String refFasta 
-    String Vepcache
-    String CoverageBed
-    String HaplotectBed
-    String ReferenceDict
+        String refFasta 
+        String ReferenceDict
+        String Vepcache
+        String CivicCachePath
 
-    String CustomAnnotationVcf
-    String CustomAnnotationIndex
-    String CustomAnnotationParameters
+        String? VariantDB
 
-    String QcMetrics
-    String Description
+        String GWSeqRepo                
 
-    String SubDir
-    String OutputDir
+        String CoverageBed = GWSeqRepo + "/accessory_files/GWSeq.all.hg38.bed"
+        String CustomAnnotationVcf = GWSeqRepo + "/accessory_files/GWSeq.custom_annotations.vcf.gz"
+        String CustomAnnotationIndex = CustomAnnotationVcf + ".tbi"
+        String QcMetrics = GWSeqRepo + "/accessory_files/GWSeq.QCMetrics.json"
+        String HaplotectBed = GWSeqRepo + "/accessory_files/GWSeq.haplotect.bed"
+        String SVGeneList = GWSeqRepo + "/accessory_files/GWSeq.gene_fusions.txt"
+        # this is a static parameter. Shouldnt need to change
+        String CustomAnnotationParameters = "GWSEQ,vcf,exact,0,BLACKLIST"
 
-    String Queue
-    String JobGroup 
+        String MakeReportPy = GWSeqRepo + "/scripts/make_gwseq_report.py"
 
-    call run_freebayes {
-        input: Cram=Cram,
-               CramIndex=CramIndex,
-               CoverageBed=CoverageBed,
-               refFasta=refFasta,
-               Name=Name,
-               queue=Queue,
-               jobGroup=JobGroup
+        String SubDir
+        String OutputDir
+
+        String Queue
+        String JobGroup 
     }
 
-    call clean_variants as clean_freebayes {
-        input: Vcf=run_freebayes.vcf,
-               Name=Name,
-               refFasta=refFasta,
-               queue=Queue,
-               jobGroup=JobGroup
-    }
+    Int MinSVReads = 10
 
-    call run_pindel_region as run_pindel_flt3itd {
-        input: Cram=Cram,
-               CramIndex=CramIndex,
-               Reg=CoverageBed,
-               refFasta=refFasta,
-               Name=Name,
-               queue=Queue,
-               jobGroup=JobGroup
-    }
-
-    call bgzip_tabix as bgzip_tabix_pindel {
-        input: Vcf=run_pindel_flt3itd.vcf,
-               Name=Name,
-               queue=Queue,
-               jobGroup=JobGroup
-    }
-
-    call clean_variants as clean_pindel_itd {
-        input: Vcf=bgzip_tabix_pindel.vcf,
-               Name=Name,
-               refFasta=refFasta,
-               queue=Queue,
-               jobGroup=JobGroup
-    }
-
-    call combine_variants {
-        input: Vcfs=[clean_freebayes.cleaned_vcf_file,clean_pindel_itd.cleaned_vcf_file],
-               Cram=Cram,
-               CramIndex=CramIndex,
-               refFasta=refFasta,
+    call run_civic {
+        input: CivicCachePath=CivicCachePath,
+               Vcf=DragenVcf,
+               VcfIndex=DragenVcfIndex,
                Name=Name,
                queue=Queue,
                jobGroup=JobGroup
     }
 
     call run_vep {
-        input: CombineVcf=combine_variants.vcf,
+        input: Vcf=run_civic.vcf,
                refFasta=refFasta,
                Vepcache=Vepcache,
                CustomAnnotationVcf=CustomAnnotationVcf,
@@ -88,11 +60,29 @@ workflow GatewayseqAnalysis {
                jobGroup=JobGroup
     }
 
+    call filter_sv {
+        input: Vcf=DragenSvVcf,
+               VcfIndex=DragenSvVcfIndex,
+               Name=Name,
+               MinReads=MinSVReads,
+               queue=Queue,
+               jobGroup=JobGroup
+    }
+
+    call annotate_sv {
+        input: Vcf=filter_sv.vcf,
+               refFasta=refFasta,
+               Vepcache=Vepcache,
+               Name=Name,
+               queue=Queue,
+               jobGroup=JobGroup
+    }
+
     call run_haplotect {
         input: refFasta=refFasta,
                refDict=ReferenceDict,
-               Cram=Cram,
-               CramIndex=CramIndex,
+               Cram=DragenCram,
+               CramIndex=DragenCramIndex,
                Bed=HaplotectBed,
                Name=Name,
                queue=Queue,
@@ -100,25 +90,23 @@ workflow GatewayseqAnalysis {
     }
 
     call gather_files {
-        input: OutputFiles=[clean_pindel_itd.cleaned_vcf_file,
-               combine_variants.vcf,
-               run_haplotect.out_file,
+        input: OutputFiles=[run_haplotect.out_file,
                run_haplotect.sites_file,
                run_vep.vcf,
-               run_vep.filtered_vcf],
+               run_vep.index,
+               annotate_sv.vcf,
+               annotate_sv.index],
                OutputDir=OutputDir,
                SubDir=SubDir,
                queue=Queue,
                jobGroup=JobGroup
     }
 
-    call haloplex_qc {
+    call make_report {
         input: order_by=gather_files.done,
-               refFasta=refFasta,
                Name=Name,
-               CoverageBed=CoverageBed,
-               QcMetrics=QcMetrics,
-               Description=Description,
+               VariantDB=VariantDB,
+               MakeReportPy=MakeReportPy,
                OutputDir=OutputDir,
                SubDir=SubDir,
                queue=Queue,
@@ -126,180 +114,60 @@ workflow GatewayseqAnalysis {
     }
 
     output {
-        String all_done = haloplex_qc.done
+        String all_done = make_report.done
     }
 }
 
-task run_freebayes {
-     File Cram
-     File CramIndex
-     String CoverageBed
-     String refFasta
-     String Name
-     Float? MinFreq
-     Int? MinReads
-     Int? MinMapQual
-     Int? MaxMismatch
 
-     String jobGroup
-     String queue
-
+task run_civic {
+     input {
+         File Vcf
+         File VcfIndex
+         String CivicCachePath
+         String Name
+         String jobGroup
+         String queue
+     }
      command {
-         /usr/local/bin/freebayes -C ${default=3 MinReads} -q ${default=13 MinMapQual} -F ${default="0.0008" MinFreq} -$ ${default=4 MaxMismatch} \
-         -f ${refFasta} -t ${CoverageBed} ${Cram} > "${Name}.freebayes.vcf"
-     }
-
-     runtime {
-         docker_image: "registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v1"
-         cpu: "1"
-         memory: "16 G"
-         queue: queue
-         job_group: jobGroup
-     }
-     output {
-         File vcf = "${Name}.freebayes.vcf"
-     }
-}
-
-task run_pindel_region {
-     File Cram
-     File CramIndex
-     String Reg
-     String? Genome
-     Int? Isize
-     Int? MinReads
-     String refFasta
-     String Name
-     String jobGroup
-     String queue
-
-     command <<<
-         (set -eo pipefail && /usr/local/bin/samtools view -T ${refFasta} -ML ${Reg} ${Cram} | /opt/pindel-0.2.5b8/sam2pindel - /tmp/in.pindel ${default=250 Isize} tumor 0 Illumina-PairEnd) && \
-         /usr/local/bin/pindel -f ${refFasta} -p /tmp/in.pindel -j ${Reg} -o /tmp/out.pindel && \
-         /usr/local/bin/pindel2vcf -P /tmp/out.pindel -G -r ${refFasta} -e ${default=3 MinReads} -R ${default="GRCh38" Genome} -d ${default="GRCh38" Genome} -v /tmp/out.vcf && \
-         sed 's/END=[0-9]*;//' /tmp/out.vcf > ${Name}.pindel.vcf
-     >>>
-
-     runtime {
-         docker_image: "registry.gsc.wustl.edu/mgi-cle/pindel2vcf-0.6.3:1"
-         cpu: "1"
-         memory: "16 G"
-         queue: queue
-         job_group: jobGroup
-     }
-     output {
-         File vcf = "${Name}.pindel.vcf"
-     }
-}
-
-task bgzip_tabix {
-     String Vcf
-     String Name
-     String queue
-     String jobGroup
-
-     command {
-         /opt/htslib/bin/bgzip -c ${Vcf} > ${Name}.bgzip_tabix.vcf.gz && \
-         /usr/bin/tabix -p vcf ${Name}.bgzip_tabix.vcf.gz
+         export CIVICPY_CACHE_FILE=${CivicCachePath} && \
+         /usr/local/bin/civicpy annotate-vcf --input-vcf ${Vcf}  --output-vcf ${Name}.civic.vcf.gz --reference GRCh38 -i accepted
      }
      runtime {
-         docker_image: "registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v1"
-         cpu: "1"
-         memory: "8 G"
-         queue: queue
-         job_group: jobGroup
-     }
-     output {
-         File vcf = "${Name}.bgzip_tabix.vcf.gz"
-         File index = "${Name}.bgzip_tabix.vcf.gz.tbi"
-     }
-}
-
-task clean_variants {
-     String Vcf
-     String Name
-     String refFasta
-     String jobGroup
-     String queue
-
-     command {
-         /usr/local/bin/bcftools sort -Oz ${Vcf} | \
-         /usr/local/bin/bcftools norm -m-any -f ${refFasta} -Oz | \
-         /usr/local/bin/bcftools norm -d any -Oz > "${Name}.cleaned.vcf.gz" && \
-         /usr/bin/tabix -p vcf "${Name}.cleaned.vcf.gz"
-     }
-
-     runtime {
-         docker_image: "registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v1"
-         cpu: "1"
-         memory: "16 G"
-         queue: queue
-         job_group: jobGroup
-     }
-     output {
-         File cleaned_vcf_file = "${Name}.cleaned.vcf.gz"
-         File index = "${Name}.cleaned.vcf.gz.tbi"
-     }
-}
-
-task combine_variants {
-     Array[String] Vcfs
-     String Cram
-     String CramIndex
-     String refFasta
-     String Name
-     String jobGroup
-     String queue
-
-     command {
-         /usr/local/bin/bcftools merge --force-samples -Oz -o combined.vcf.gz ${sep=" " Vcfs} && \
-         /usr/bin/tabix -p vcf combined.vcf.gz && \
-         /usr/bin/python3 /usr/local/bin/filterHaloplex.py -r ${refFasta} combined.vcf.gz ${Cram} ${Name} > ${Name}.combined_and_tagged.vcf
-     }
-
-     runtime {
-         docker_image: "registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v1"
+         docker_image: "docker1(griffithlab/civicpy:3.0.0)"
          cpu: "1"
          memory: "10 G"
          queue: queue
          job_group: jobGroup
      }
      output {
-         File vcf = "${Name}.combined_and_tagged.vcf"
+         File vcf = "${Name}.civic.vcf.gz"
      }
 }
 
 task run_vep {
-     File CombineVcf
-     String refFasta
-     String Vepcache
-     File CustomAnnotationVcf
-     File CustomAnnotationIndex
-     String CustomAnnotationParameters
-     Float? maxAF
-     String Name
-     String jobGroup
-     String queue
+     input {
+         File Vcf
+         String refFasta
+         String Vepcache
 
+         String CustomAnnotationVcf
+         String CustomAnnotationIndex
+         String CustomAnnotationParameters
+
+         Float? maxAF
+         String Name
+         String jobGroup
+         String queue
+     }
      command {
-         if [ $(/bin/grep -v '^#' ${CombineVcf}|/usr/bin/wc -l) == 0 ]; then
-             /bin/cp ${CombineVcf} ${Name}.annotated.vcf && \
-             /bin/cp ${CombineVcf} ${Name}.annotated_filtered.vcf && \
-             /opt/htslib/bin/bgzip ${Name}.annotated.vcf && /usr/bin/tabix -p vcf ${Name}.annotated.vcf.gz && \
-             /opt/htslib/bin/bgzip ${Name}.annotated_filtered.vcf && /usr/bin/tabix -p vcf ${Name}.annotated_filtered.vcf.gz && \
-             /usr/bin/touch ${Name}.variants_annotated.tsv
-         else
-             /usr/bin/perl -I /opt/lib/perl/VEP/Plugins /usr/bin/variant_effect_predictor.pl --format vcf \
-             --vcf --plugin Downstream --fasta ${refFasta} --hgvs --symbol --term SO --flag_pick \
-             -i ${CombineVcf} --custom ${CustomAnnotationVcf},${CustomAnnotationParameters} --offline --cache --max_af --dir ${Vepcache} -o ${Name}.annotated.vcf && \
-             /opt/htslib/bin/bgzip ${Name}.annotated.vcf && /usr/bin/tabix -p vcf ${Name}.annotated.vcf.gz && \
-             /usr/bin/perl -I /opt/lib/perl/VEP/Plugins /opt/vep/ensembl-vep/filter_vep -i ${Name}.annotated.vcf.gz --format vcf \
-             --filter "(MAX_AF < ${default='0.001' maxAF} or not MAX_AF) or MYELOSEQ_TCGA_AC or MYELOSEQ_MDS_AC" -o ${Name}.annotated_filtered.vcf && \
-             /opt/htslib/bin/bgzip ${Name}.annotated_filtered.vcf && /usr/bin/tabix -p vcf ${Name}.annotated_filtered.vcf.gz
-         fi
+         /usr/local/bin/tabix -p vcf ${Vcf} && \
+         /usr/bin/perl -I /opt/vep/lib/perl/VEP/Plugins /opt/vep/src/ensembl-vep/vep --format vcf \
+         --vcf --plugin Downstream --fasta ${refFasta} --hgvs --symbol --term SO --flag_pick \
+         -i ${Vcf} --custom ${CustomAnnotationVcf},${CustomAnnotationParameters} --offline --cache --max_af --dir ${Vepcache} -o ${Name}.annotated.vcf && \
+         /usr/local/bin/bgzip ${Name}.annotated.vcf && /usr/local/bin/tabix -p vcf ${Name}.annotated.vcf.gz
      }
      runtime {
-         docker_image: "registry.gsc.wustl.edu/fdu/vep90-gatk3.6-htslib1.3.2:1"
+         docker_image: "docker1(registry.gsc.wustl.edu/mgi-cle/vep105-htslib1.9:1)"
          cpu: "1"
          memory: "10 G"
          queue: queue
@@ -307,33 +175,97 @@ task run_vep {
      }
      output {
          File vcf = "${Name}.annotated.vcf.gz"
-         File filtered_vcf = "${Name}.annotated_filtered.vcf.gz"
+         File index = "${Name}.annotated.vcf.gz.tbi"
+
      }
 }
 
+task filter_sv {
+    input { 
+        File Vcf
+        File VcfIndex
+        String Name
+        Int MinReads
+
+        String jobGroup
+        String queue
+    }
+
+    command {
+        bcftools view -i 'FMT/SR[0:1]>=${MinReads}' -Oz -o ${Name}.sv.filtered.vcf.gz ${Vcf} && \
+        tabix -p vcf ${Name}.sv.filtered.vcf.gz
+    }
+
+    runtime {
+        docker_image: "docker1(ghcr.io/dhslab/docker-baseimage:latest)"
+        cpu: "1"
+        memory: "10 G"
+        queue: queue
+        job_group: jobGroup
+    }
+
+     output {
+         File vcf = "${Name}.sv.filtered.vcf.gz"
+         File index = "${Name}.sv.filtered.vcf.gz.tbi"
+     }
+}
+
+task annotate_sv {
+    input { 
+        String Vcf
+        String Name
+
+        String refFasta
+        String Vepcache
+
+        String jobGroup
+        String queue
+    }
+
+    command {
+        /usr/bin/perl -I /opt/vep/lib/perl/VEP/Plugins /opt/vep/src/ensembl-vep/vep --format vcf --vcf --fasta ${refFasta} \
+        --flag_pick --symbol --term SO -o ${Name}.sv_annotated.vcf -i ${Vcf} --offline --cache --dir ${Vepcache} && \
+        /usr/local/bin/bgzip ${Name}.sv_annotated.vcf && /usr/local/bin/tabix -p vcf ${Name}.sv_annotated.vcf.gz
+    }
+
+    runtime {
+        docker_image: "docker1(registry.gsc.wustl.edu/mgi-cle/vep105-htslib1.9:1)"
+        cpu: "1"
+        memory: "10 G"
+        queue: queue
+        job_group: jobGroup
+    }
+
+    output {
+        File vcf = "${Name}.sv_annotated.vcf.gz"
+        File index = "${Name}.sv_annotated.vcf.gz.tbi"
+    }
+}
+
 task run_haplotect {
-     String Cram
-     String CramIndex
-     String Bed
-     String Name
-     String refDict
-     String refFasta
-     String queue
-     String jobGroup
+     input {
+         String Cram
+         String CramIndex
+         String Bed
+         String Name
+         String refDict
+         String refFasta
+         String queue
+         String jobGroup
 
-     Int? MinReads
-
+         Int? MinReads
+     }
      command <<<
-         /usr/bin/awk -v OFS="\t" '{ $2=$2-1; print; }' ${Bed} > /tmp/pos.bed && \
+         /usr/bin/awk -v OFS="\t" '{ $2=$2-1; print; }' ~{Bed} > /tmp/pos.bed && \
          /usr/local/openjdk-8/bin/java -Xmx6g \
          -jar /opt/hall-lab/gatk-package-4.1.8.1-18-ge2f02f1-SNAPSHOT-local.jar Haplotect \
-         -I ${Cram} -R ${refFasta} --sequence-dictionary ${refDict} \
-         -mmq 20 -mbq 20 -max-depth-per-sample 10000 -gstol 0.001 -mr ${default=10 MinReads} \
-         -htp ${Bed} -L /tmp/pos.bed -outPrefix ${Name}
+         -I ~{Cram} -R ~{refFasta} --sequence-dictionary ~{refDict} \
+         -mmq 20 -mbq 20 -max-depth-per-sample 10000 -gstol 0.001 -mr ~{default=10 MinReads} \
+         -htp ~{Bed} -L /tmp/pos.bed -outPrefix ~{Name}
      >>>
 
      runtime {
-         docker_image: "registry.gsc.wustl.edu/mgi-cle/haplotect:0.3"
+         docker_image: "docker1(registry.gsc.wustl.edu/mgi-cle/haplotect:0.3)"
          cpu: "1"
          memory: "8 G"
          queue: queue
@@ -345,27 +277,50 @@ task run_haplotect {
      }
 }
 
-task haloplex_qc {
-     String order_by
-     String refFasta
-     String Name
-     String CoverageBed
-     String QcMetrics
-     String Description
-     String OutputDir
-     String SubDir
-     String jobGroup
-     String queue
+task gather_files {
+     input {
+         Array[String] OutputFiles
+         String OutputDir
+         String? SubDir
+         String jobGroup
+         String queue
+     }
+     command {
+         if [[ ${SubDir} != "" ]] && [[ ! -e ${OutputDir}/${SubDir} ]]; then
+             mkdir ${OutputDir}/${SubDir}
+         fi
+         /bin/mv -f -t ${OutputDir}/${SubDir} ${sep=" " OutputFiles}
+     }
+     runtime {
+         docker_image: "docker1(registry.gsc.wustl.edu/genome/lims-compute-xenial:1)"
+         queue: queue
+         job_group: jobGroup
+     }
+     output {
+         String done = stdout()
+     }
+}
+
+task make_report {
+     input {
+         String order_by
+         String Name
+         String? VariantDB
+         String MakeReportPy
+         String OutputDir
+         String SubDir
+         String queue
+         String jobGroup
+     }
 
      String SampleOutDir = OutputDir + "/" + SubDir
 
      command {
-         /usr/bin/perl /usr/local/bin/CalculateCoverageQC.pl -r ${refFasta} -d ${SampleOutDir} -n ${Name} \
-         -t ${CoverageBed} -q ${QcMetrics} -i ${Description} && \
-         /bin/mv ./*.qc.txt ./*.qc.json ${SampleOutDir}
+         /usr/bin/python3 ${MakeReportPy} -n ${Name} -d ${SampleOutDir} ${'--variantdb ' + VariantDB} && \
+         /bin/mv ./*.report.txt ./*.report.json ${SampleOutDir}
      }
      runtime {
-         docker_image: "registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v1"
+         docker_image: "docker1(registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v2)"
          cpu: "1"
          memory: "16 G"
          queue: queue
@@ -376,25 +331,3 @@ task haloplex_qc {
      }
 }
 
-task gather_files {
-     Array[String] OutputFiles
-     String OutputDir
-     String? SubDir
-     String jobGroup
-     String queue
-
-     command {
-         if [[ ${SubDir} != "" ]] && [[ ! -e ${OutputDir}/${SubDir} ]]; then
-             mkdir ${OutputDir}/${SubDir}
-         fi
-         /bin/mv -f -t ${OutputDir}/${SubDir} ${sep=" " OutputFiles}
-     }
-     runtime {
-         docker_image: "registry.gsc.wustl.edu/genome/lims-compute-xenial:1"
-         queue: queue
-         job_group: jobGroup
-     }
-     output {
-         String done = stdout()
-     }
-}

@@ -1,140 +1,147 @@
+version 1.0
+
 import "GatewayseqAnalysis.wdl" as subWF
 
 workflow Gatewayseq {
+    input {
+        File SampleSheet
+        # sample sheet has this structure:
+        # index  name  RG_ID  RG_FLOWCELL  RG_LANE  RG_LIB  RG_SAMPLE [R1] [R2]
 
-    File SampleSheet
-    # sample sheet has this structure:
-    # index  name  RG_ID  RG_FLOWCELL  RG_LANE  RG_LIB  RG_SAMPLE [R1] [R2]
-    
-    File? DemuxSampleSheet
+        File? DemuxSampleSheet
+        String? IlluminaDir
+        String? DragenEnv
 
-    Array[String] Adapters = ["GATCGGAAGAGCACACGTCTGAACTCCAGTCAC","AGATCGGAAGAGCGTCGTGTAGGGAAA"]
+        String CivicCachePath = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl"
 
-    String? IlluminaDir
-    String JobGroup
-    String OutputDir
+        String GWSeqRepo
 
-    String Queue
-    String DragenQueue = "duncavagee"
+        String? VariantDB
 
-    String DragenReference = "/staging/runs/Chromoseq/refdata/dragen_hg38"
-    String Reference    = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.fa"
-    String ReferenceDict = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.dict"
+        # set inputs based on git repo
+        String CoverageBed = GWSeqRepo + "/accessory_files/GWSeq.all.hg38.bed"
+        String CNVNormFile = GWSeqRepo + "/accessory_files/GWSeq.panel_of_normals.list"
+        String CNVSegBed = GWSeqRepo + "/accessory_files/GWSeq.seg_all_genes.bed"
+        String GeneCoverageBed = GWSeqRepo + "/accessory_files/GWSeq.genes.hg38.bed" 
+        String OtherCoverageBed = GWSeqRepo + "/accessory_files/GWSeq.other.hg38.bed"
+        String CustomAnnotationVcf = GWSeqRepo + "/accessory_files/GWSeq.custom_annotations.vcf.gz"
+        String CustomAnnotationIndex = GWSeqRepo + "/accessory_files/GWSeq.custom_annotations.vcf.gz.tbi"
+        String QcMetrics = GWSeqRepo + "/accessory_files/GWSeq.QCMetrics.json"
+        String HaplotectBed = GWSeqRepo + "/accessory_files/GWSeq.haplotect.bed"
+        String SVGeneList = GWSeqRepo + "/accessory_files/GWSeq.gene_fusions.txt"
+        String MSIMicroSatFile = GWSeqRepo + "/accessory_files/GWSeq.microsatellite_file.txt"
+        String QC_pl = GWSeqRepo + "/scripts/QC_metrics.pl"
 
-    String VEP          = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/VEP_cache"
-    String QcMetrics    = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeqMetrics.txt"
-    String Description  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeqDescription.txt" 
+        String CustomAnnotationParameters = "GWSEQ,vcf,exact,0,BLACKLIST"
 
-    String HaplotectBed = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq.haplotect_snppairs_hg38.041718.bed"
-    String AmpliconBed  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeq66650-1622560509.Amplicons.hg38.110321.bed"
-    String CoverageBed  = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/GatewaySeq66650-1622560509.CoverageQC.hg38.110321.bed"
-    String DragenCoverageBed = "/staging/runs/Haloplex/dragen_align_inputs/GatewaySeq66650-1622560509.CoverageQC.hg38.110321.bed"
+        String JobGroup
+        String OutputDir
+        String Queue
+        String DragenQueue
+        String DragenDockerImage
 
-    String CustomAnnotationVcf   = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq_custom_annotations.annotated.011618.hg38.vcf.gz"
-    String CustomAnnotationIndex = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/accessory_files/myeloseq_custom_annotations.annotated.011618.hg38.vcf.gz.tbi"
-    String CustomAnnotationParameters = "MYELOSEQ,vcf,exact,0,TCGA_AC,MDS_AC,MYELOSEQBLACKLIST"
+        Int readfamilysize
+        Int CNVfilterlength
 
-    String QC_pl = "/storage1/fs1/gtac-mgi/Active/CLE/analysis/gatewayseq/git/cle-gatewayseq/QC_metrics.pl"
-    String DemuxFastqDir = "/scratch1/fs1/gtac-mgi/CLE/gatewayseq/demux_fastq"
+        Boolean RmRunDir
+    }
+
+    String DragenReference = "/storage1/fs1/gtac-mgi/Active/CLE/reference/dragen_hg38"
+    String SvNoiseFile     = "/storage1/fs1/gtac-mgi/Active/CLE/reference/dragen_align_inputs/hg38/WGS_v1.0.0_hg38_sv_systematic_noise.bedpe.gz"
+    String Reference       = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.fa"
+    String ReferenceDict   = "/storage1/fs1/duncavagee/Active/SEQ/Chromoseq/process/refdata/hg38/all_sequences.dict"
+
+    String VEP             = "/storage1/fs1/gtac-mgi/Active/CLE/reference/VEP_cache"
+    String NirvanaDB       = "/storage1/fs1/gtac-mgi/Active/CLE/reference/dragen_align_inputs/hg38/nirvana_annotation_data"
+    String MSIRefNormalDir = "/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/MSI_normal_reference"
+
+    String CoverageThresholds = "100,250,500,1000,1500,2000"
+
+    String DemuxFastqDir   = "/storage1/fs1/gtac-mgi/Active/CLE/assay/gatewayseq/demux_fastq"
+
+    call update_local_civic_cache {
+        input: CivicCachePath=CivicCachePath,
+               queue=Queue,
+               jobGroup=JobGroup
+    }
 
     if (defined(DemuxSampleSheet)){
-      call dragen_demux {
-        input: Dir=IlluminaDir,
-        OutputDir=OutputDir,
-        SampleSheet=DemuxSampleSheet,
-        queue=DragenQueue,
-        jobGroup=JobGroup
-      }
+        call dragen_demux {
+            input: Dir=IlluminaDir,
+                   OutputDir=OutputDir,
+                   SampleSheet=DemuxSampleSheet,
+                   DragenEnv=DragenEnv,
+                   DragenDockerImage=DragenDockerImage,
+                   queue=DragenQueue,
+                   jobGroup=JobGroup
+        }
 
-      call prepare_samples {
-        input: SampleSheet=SampleSheet,
-        Fastq1=dragen_demux.read1,
-        Fastq2=dragen_demux.read2,
-        queue=Queue,
-        jobGroup=JobGroup
-      }
+        call prepare_samples {
+            input: SampleSheet=SampleSheet,
+                   Fastq1=dragen_demux.read1,
+                   Fastq2=dragen_demux.read2,
+                   queue=Queue,
+                   jobGroup=JobGroup
+        }
     }
 
     Array[Array[String]] inputData = read_tsv(select_first([prepare_samples.sample_sheet,SampleSheet]))
 
     # the inputdata should be: index  name  RG_ID  RG_FLOWCELL  RG_LANE  RG_LIB  RG_SAMPLE read1path read2path
     scatter (samples in inputData){
-
-        if(!defined(DemuxSampleSheet)){
-          call trim_reads {
-              input: Read1=samples[7],
-              Read2=samples[8],
-              Adapters=Adapters,
-              Name=samples[1],
-              queue=Queue,
-              jobGroup=JobGroup
-          }
-        }
-
         call dragen_align {
             input: DragenRef=DragenReference,
-                   fastq1=select_first([trim_reads.read1,samples[7]]),
-                   fastq2=select_first([trim_reads.read2,samples[8]]),
+                   fastq1=samples[7],
+                   fastq2=samples[8],
                    Name=samples[1],
                    RG=samples[3] + '.' + samples[4] + '.' + samples[0],
                    SM=samples[6],
                    LB=samples[5] + '.' + samples[0],
-                   AmpliconBed=AmpliconBed,
-                   CoverageBed=DragenCoverageBed,
+                   readfamilysize=readfamilysize,
+                   CNVfilterlength=CNVfilterlength,
+                   CNVNormFile=CNVNormFile,
+                   CNVSegBed=CNVSegBed,
+                   NirvanaDB=NirvanaDB,
+                   CoverageBed=CoverageBed,
+                   GeneCoverageBed=GeneCoverageBed,
+                   OtherCoverageBed=OtherCoverageBed,
+                   CoverageThresholds=CoverageThresholds,
+                   SvNoiseFile=SvNoiseFile,
+                   MSIMicroSatFile=MSIMicroSatFile,
+                   MSIRefNormalDir=MSIRefNormalDir,
                    OutputDir=OutputDir,
                    SubDir=samples[1] + '_' + samples[0],
+                   DragenEnv=DragenEnv,
+                   DragenDockerImage=DragenDockerImage,
                    queue=DragenQueue,
                    jobGroup=JobGroup
         }
 
-        call convert_bam {
-            input: Bam=dragen_align.bam,
-                   BamIndex=dragen_align.bai,
-                   AmpliconBed=AmpliconBed,
-                   refFasta=Reference,
-                   Name=samples[1],
-                   OutputDir=OutputDir,
-                   SubDir=samples[1] + '_' + samples[0],
-                   queue=Queue,
-                   jobGroup=JobGroup
-        }
-
         call subWF.GatewayseqAnalysis {
-            input: Cram=convert_bam.cram,
-                   CramIndex=convert_bam.crai,
-                   CoverageBed=CoverageBed,
+            input: Name=samples[1],
+                   GWSeqRepo=GWSeqRepo,
                    refFasta=Reference,
                    ReferenceDict=ReferenceDict,
-                   Name=samples[1],
-                   Vepcache=VEP,
-                   CustomAnnotationVcf=CustomAnnotationVcf,
-                   CustomAnnotationIndex=CustomAnnotationIndex,
-                   CustomAnnotationParameters=CustomAnnotationParameters,
                    HaplotectBed=HaplotectBed,
+                   CivicCachePath=CivicCachePath,
+                   Vepcache=VEP,
+                   VariantDB=VariantDB,
+                   CoverageBed=CoverageBed,
+                   SVGeneList=SVGeneList,
                    QcMetrics=QcMetrics,
-                   Description=Description,
+                   DragenVcf=dragen_align.vcf,
+                   DragenVcfIndex=dragen_align.index,
+                   DragenSvVcf=dragen_align.svvcf,
+                   DragenSvVcfIndex=dragen_align.svindex,
+                   DragenCram=dragen_align.cram,
+                   DragenCramIndex=dragen_align.crai,
                    OutputDir=OutputDir,
                    SubDir=samples[1] + '_' + samples[0],
                    Queue=Queue,
                    JobGroup=JobGroup
         }
-    } 
-    
-    if (defined(DemuxSampleSheet)){
-        call move_demux_fastq {
-            input: order_by=GatewayseqAnalysis.all_done,
-            Batch=basename(OutputDir),
-            DemuxFastqDir=DemuxFastqDir,
-            queue=DragenQueue,
-            jobGroup=JobGroup
-        }
 
-        call remove_rundir {
-            input: order_by=GatewayseqAnalysis.all_done,
-            rundir=IlluminaDir,
-            queue=DragenQueue,
-            jobGroup=JobGroup
-        }
+
     }
 
     call batch_qc {
@@ -144,18 +151,41 @@ workflow Gatewayseq {
                queue=Queue,
                jobGroup=JobGroup
     }
+
+    if (defined(DemuxSampleSheet)){
+        call move_demux_fastq {
+            input: order_by=GatewayseqAnalysis.all_done,
+                   Batch=basename(OutputDir),
+                   DemuxFastqDir=DemuxFastqDir,
+                   queue=DragenQueue,
+                   jobGroup=JobGroup
+        }
+
+        if (RmRunDir) {
+            call remove_rundir {
+                 input: order_by=GatewayseqAnalysis.all_done,
+                        rundir=IlluminaDir,
+                        queue=DragenQueue,
+                        jobGroup=JobGroup
+            }
+        }
+    }
 }
 
 
 task dragen_demux {
-     String Dir
-     String OutputDir
-     String SampleSheet
-     String jobGroup
-     String queue
+     input {
+         String? Dir
+         String OutputDir
+         File? SampleSheet
+         String? DragenEnv
+         String DragenDockerImage
+         String jobGroup
+         String queue
+     }
 
      String batch = basename(OutputDir)
-     String StagingDir = "/staging/runs/Haloplex/"
+     String StagingDir = "/staging/runs/GatewaySeq/"
      String LocalFastqDir = StagingDir + "demux_fastq/" + batch
      String LocalReportDir = LocalFastqDir + "/Reports"
      String LocalSampleSheet = StagingDir + "sample_sheet/" + batch + '.csv'
@@ -163,22 +193,22 @@ task dragen_demux {
      String DemuxReportDir = OutputDir + "/dragen_demux_reports"
 
      command <<<
-         /bin/cp ${SampleSheet} ${LocalSampleSheet} && \
-         /opt/edico/bin/dragen --bcl-conversion-only true --bcl-only-matched-reads true --strict-mode true --sample-sheet ${LocalSampleSheet} --bcl-input-directory ${Dir} --output-directory ${LocalFastqDir} &> ${log} && \
-         /bin/ls ${LocalFastqDir}/*_R1_001.fastq.gz > Read1_list.txt && \
-         /bin/ls ${LocalFastqDir}/*_R2_001.fastq.gz > Read2_list.txt && \
-         /bin/mv ${log} ./ && \
-         /bin/rm -f ${LocalSampleSheet} && \
-         /bin/cp -r ${LocalReportDir} ${DemuxReportDir}
+         /bin/cp ~{SampleSheet} ~{LocalSampleSheet} && \
+         /opt/edico/bin/dragen --bcl-conversion-only true --bcl-only-matched-reads true --strict-mode true --sample-sheet ~{LocalSampleSheet} --bcl-input-directory ~{Dir} --output-directory ~{LocalFastqDir} &> ~{log} && \
+         /bin/ls ~{LocalFastqDir}/*_R1_001.fastq.gz > Read1_list.txt && \
+         /bin/ls ~{LocalFastqDir}/*_R2_001.fastq.gz > Read2_list.txt && \
+         /bin/mv ~{log} ./ && \
+         /bin/rm -f ~{LocalSampleSheet} && \
+         /bin/cp -r ~{LocalReportDir} ~{DemuxReportDir}
      >>>
 
      runtime {
-         docker_image: "seqfu/centos7-dragen-3.9.3:latest"
+         docker_image: DragenDockerImage
+         dragen_env: DragenEnv
          cpu: "20"
          memory: "200 G"
          queue: queue
-#        host: "compute1-dragen-3"
-         job_group: jobGroup 
+         job_group: jobGroup
      }
      output {
          File read1 = "Read1_list.txt"
@@ -187,98 +217,86 @@ task dragen_demux {
 }
 
 task prepare_samples {
-     File SampleSheet
-     String Fastq1
-     String Fastq2
-     String jobGroup
-     String queue
+     input {
+         File SampleSheet
+         String Fastq1
+         String Fastq2
+         String jobGroup
+         String queue
+     }
 
      command <<<
-             /bin/cp ${Fastq1} 1.tmp.txt
-             /bin/cp ${Fastq2} 2.tmp.txt
-             /usr/bin/perl -e 'open(R1,"1.tmp.txt"); @r1 = <R1>; \
-                 chomp @r1; close R1;\
-                 open(R2,"2.tmp.txt"); @r2 = <R2>; \
-                 chomp @r2; close R2; \
-                 open(SS,"${SampleSheet}");
-                 while(<SS>){
-                     chomp;
-                     my @l = split("\t",$_);
-                     my $s = $l[1].'_';
-                     my $r1 = (grep /$s/, @r1)[0];
-                     my $r2 = (grep /$s/, @r2)[0];
-                     print join("\t",@l,$r1,$r2),"\n";
-                 }
-                 close SS;' > sample_sheet.txt
+         /bin/cp ~{Fastq1} 1.tmp.txt
+         /bin/cp ~{Fastq2} 2.tmp.txt
+         /usr/bin/perl -e 'open(R1,"1.tmp.txt"); @r1 = <R1>; \
+             chomp @r1; close R1;\
+             open(R2,"2.tmp.txt"); @r2 = <R2>; \
+             chomp @r2; close R2; \
+             open(SS,"~{SampleSheet}");
+             while(<SS>){
+                 chomp;
+                 my @l = split("\t",$_);
+                 my $s = $l[1].'_';
+                 my $r1 = (grep /$s/, @r1)[0];
+                 my $r2 = (grep /$s/, @r2)[0];
+                 print join("\t",@l,$r1,$r2),"\n";
+             }
+             close SS;' > sample_sheet.txt
      >>>
+
      runtime {
-         docker_image: "registry.gsc.wustl.edu/genome/lims-compute-xenial:1"
+         docker_image: "docker1(registry.gsc.wustl.edu/genome/lims-compute-xenial:1)"
          cpu: "1"
          memory: "4 G"
          queue: queue
          job_group: jobGroup
      }
+
      output {
          File sample_sheet = "sample_sheet.txt"
      }
 }
 
-task trim_reads {
-     String Read1
-     String Read2
-     Array[String] Adapters
-     String Name
-     String jobGroup
-     String queue
-
-     command {
-         if [[ $Read1 =~ _R1_001 ]]; then
-             /bin/cp ${Read1} ${Name}.1.fastq.gz && \
-             /bin/cp ${Read2} ${Name}.2.fastq.gz
-         else
-             export PYTHONPATH=/opt/cutadapt/lib/python2.7/site-packages/ && \
-             /opt/cutadapt/bin/cutadapt -a ${Adapters[0]} -A ${Adapters[1]} -o ${Name}.1.fastq.gz -p ${Name}.2.fastq.gz ${Read1} ${Read2}
-         fi
-     }
-
-     runtime {
-         docker_image: "registry.gsc.wustl.edu/fdu/cutadapt:1"
-         cpu: "1"
-         memory: "8 G"
-         queue: queue
-         job_group: jobGroup
-     }
-     output {
-         File read1 = "${Name}.1.fastq.gz"
-         File read2 = "${Name}.2.fastq.gz"
-     }
-}
-
 task dragen_align {
-     String Name
-     String DragenRef
-     String fastq1
-     String fastq2
-     String RG
-     String SM
-     String LB
-     String AmpliconBed
-     String CoverageBed
-     Int? TrimLen
-     String OutputDir
-     String SubDir
-     String jobGroup
-     String queue
+     input {
+         String Name
+         String DragenRef
+         String fastq1
+         String fastq2
+         String RG
+         String SM
+         String LB
+         String CNVfilterlength
+         String CNVNormFile
+         String CNVSegBed
+         String NirvanaDB
+         String CoverageBed
+         String GeneCoverageBed
+         String OtherCoverageBed
+         String CoverageThresholds
+         String SvNoiseFile
+         String MSIMicroSatFile
+         String MSIRefNormalDir
+         String OutputDir
+         String SubDir
+         String jobGroup
+         String queue
+         String DragenDockerImage
+         String? DragenEnv
+
+         Int? TrimLen
+         Int readfamilysize
+     }
 
      String batch = basename(OutputDir)
-
-     String StagingDir = "/staging/runs/Haloplex/"
+     String StagingDir = "/staging/runs/GatewaySeq/"
      String LocalAlignDir = StagingDir + "align/" + batch
      String LocalSampleDir = LocalAlignDir + "/" + SubDir
      String log = StagingDir + "log/" + Name + "_align.log"
 
      String outdir = OutputDir + "/" + SubDir
      String dragen_outdir = outdir + "/dragen"
+
 
      command {
          if [ ! -d "${LocalAlignDir}" ]; then
@@ -287,74 +305,54 @@ task dragen_align {
 
          /bin/mkdir ${LocalSampleDir} && \
          /bin/mkdir ${outdir} && \
-         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} --enable-map-align true --enable-sort true --enable-map-align-output true --vc-enable-umi-liquid true --gc-metrics-enable=true --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads 1 --enable-variant-caller=true --vc-target-bed ${CoverageBed} --umi-metrics-interval-file ${CoverageBed} --read-trimmers=fixed-len --trim-r1-5prime=${default=1 TrimLen} --trim-r1-3prime=${default=1 TrimLen} --trim-r2-5prime=${default=1 TrimLen} --trim-r2-3prime=${default=1 TrimLen} --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format BAM &> ${log} && \
+         /opt/edico/bin/dragen -r ${DragenRef} --tumor-fastq1 ${fastq1} --tumor-fastq2 ${fastq2} --RGSM-tumor ${SM} --RGID-tumor ${RG} --RGLB-tumor ${LB} \
+         --umi-enable true --umi-library-type=random-simplex --umi-min-supporting-reads ${readfamilysize} --umi-metrics-interval-file ${CoverageBed} \
+         --enable-map-align true --enable-sort true --enable-map-align-output true --gc-metrics-enable=true --qc-coverage-ignore-overlaps=true \
+         --qc-coverage-region-1 ${CoverageBed} --qc-coverage-reports-1 full_res cov_report --qc-coverage-region-1-thresholds ${CoverageThresholds} \
+         --qc-coverage-region-2 ${OtherCoverageBed} --qc-coverage-region-2-thresholds ${CoverageThresholds} \
+         --enable-variant-caller=true --vc-target-bed ${GeneCoverageBed} --vc-enable-umi-solid true --vc-combine-phased-variants-distance 3 \
+         --vc-enable-orientation-bias-filter true --vc-enable-triallelic-filter false \
+         --enable-sv true --sv-exome true --sv-output-contigs true --sv-systematic-noise ${SvNoiseFile} --sv-hyper-sensitivity true \
+         --sv-min-edge-observations 2 --sv-min-candidate-spanning-count 1 --sv-use-overlap-pair-evidence true \
+         --enable-cnv true --cnv-target-bed ${GeneCoverageBed} --cnv-enable-ref-calls false --cnv-filter-length ${CNVfilterlength} \
+         --cnv-normals-list ${CNVNormFile} --cnv-segmentation-mode bed --cnv-segmentation-bed ${CNVSegBed} \
+         --enable-tmb true --qc-coverage-region-3 ${CoverageBed} --qc-coverage-tag-3=tmb --qc-coverage-reports-3=callability \
+         --enable-variant-annotation true --variant-annotation-assembly GRCh38 --variant-annotation-data ${NirvanaDB} \
+         --msi-command tumor-only --msi-coverage-threshold 60 --msi-microsatellites-file ${MSIMicroSatFile} --msi-ref-normal-dir ${MSIRefNormalDir} \
+         --output-dir ${LocalSampleDir} --output-file-prefix ${Name} --output-format CRAM &> ${log} && \
          /bin/mv ${log} ./ && \
          /bin/mv ${LocalSampleDir} ${dragen_outdir}
      }
 
      runtime {
-         docker_image: "seqfu/centos7-dragen-3.9.3:latest"
+         docker_image: DragenDockerImage
+         dragen_env: DragenEnv
          cpu: "20"
          memory: "200 G"
          queue: queue
-#        host: "compute1-dragen-3"
-         job_group: jobGroup 
+         job_group: jobGroup
      }
 
      output {
-         File bam = "${dragen_outdir}/${Name}_tumor.bam"
-         File bai = "${dragen_outdir}/${Name}_tumor.bam.bai"
-     }
-}
-
-task convert_bam {
-     String Bam
-     String BamIndex
-     String Name
-     String refFasta
-     String AmpliconBed
-     String OutputDir
-     String SubDir
-     String jobGroup
-     String queue
-
-     String outdir = OutputDir + "/" + SubDir
-
-     command <<<
-         /usr/local/bin/tagbam -v ${Bam} ${AmpliconBed} /tmp/tagged.bam > ${Name}.ampinfo.txt && \
-         /usr/local/bin/samtools view -T ${refFasta} -C -o "${Name}.cram" /tmp/tagged.bam && \
-         /usr/local/bin/samtools index "${Name}.cram" &&
-         (cut -f 5 ${Name}.ampinfo.txt && cut -f 4 ${AmpliconBed}) | sort | uniq -c | awk '!/\./ { print $2,$1-1; }' > ${Name}.ampcounts.txt && \
-         /bin/cp ${Name}.ampinfo.txt ${outdir} && \
-         /bin/cp ${Name}.ampcounts.txt ${outdir} && \
-         /bin/cp ${Name}.cram ${outdir} && \
-         /bin/cp ${Name}.cram.crai ${outdir}
-     >>>
-
-     runtime {
-         docker_image: "registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v1"
-         cpu: "1"
-         memory: "24 G"
-         queue: queue
-         job_group: jobGroup 
-     }
-
-     output {
-         File cram  = "${Name}.cram"
-         File crai = "${Name}.cram.crai"
-         File info = "${Name}.ampinfo.txt"
-         File counts = "${Name}.ampcounts.txt"
+         File cram = "${dragen_outdir}/${Name}_tumor.cram"
+         File crai = "${dragen_outdir}/${Name}_tumor.cram.crai"
+         File vcf = "${dragen_outdir}/${Name}.hard-filtered.vcf.gz"
+         File index = "${dragen_outdir}/${Name}.hard-filtered.vcf.gz.tbi"
+         File svvcf = "${dragen_outdir}/${Name}.sv.vcf.gz"
+         File svindex = "${dragen_outdir}/${Name}.sv.vcf.gz.tbi"
      }
 }
 
 task move_demux_fastq {
-     Array[String] order_by
-     String Batch
-     String DemuxFastqDir
-     String queue
-     String jobGroup
+     input {
+         Array[String] order_by
+         String Batch
+         String DemuxFastqDir
+         String queue
+         String jobGroup
+     }
 
-     String LocalDemuxFastqDir = "/staging/runs/Haloplex/demux_fastq/" + Batch
+     String LocalDemuxFastqDir = "/staging/runs/GatewaySeq/demux_fastq/" + Batch
 
      command {
          if [ -d "${LocalDemuxFastqDir}" ]; then
@@ -362,28 +360,7 @@ task move_demux_fastq {
          fi
      }
      runtime {
-         docker_image: "ubuntu:xenial"
-         queue: queue
-         job_group: jobGroup
-     }
-     output {
-         String done = stdout()
-     }
-}
-
-task batch_qc {
-     Array[String] order_by
-     String BatchDir
-     String QC_pl
-     String queue
-     String jobGroup
-
-     command {
-         /usr/bin/perl ${QC_pl} ${BatchDir}
-     }
-     runtime {
-         docker_image: "registry.gsc.wustl.edu/apipe-builder/genome_perl_environment:compute1-20"
-         memory: "4 G"
+         docker_image: "docker1(ubuntu:xenial)"
          queue: queue
          job_group: jobGroup
      }
@@ -393,18 +370,67 @@ task batch_qc {
 }
 
 task remove_rundir {
-     Array[String] order_by
-     String rundir
-     String queue
-     String jobGroup
-
+     input {
+         Array[String] order_by
+         String? rundir
+         String queue
+         String jobGroup
+     }
      command {
          if [ -d "${rundir}" ]; then
              /bin/rm -Rf ${rundir}
          fi
      }
      runtime {
-         docker_image: "ubuntu:xenial"
+         docker_image: "docker1(ubuntu:xenial)"
+         queue: queue
+         job_group: jobGroup
+     }
+     output {
+         String done = stdout()
+     }
+}
+
+task update_local_civic_cache {
+     input {
+         String CivicCachePath
+         String jobGroup
+         String queue
+     }
+     command {
+         /usr/local/bin/civicpy update --hard --cache-save-path ${CivicCachePath}
+     }
+     runtime {
+         docker_image: "docker1(griffithlab/civicpy:3.0.0)"
+         cpu: "1"
+         memory: "8 G"
+         queue: queue
+         job_group: jobGroup
+     }
+     output {
+         String done = stdout()
+     }
+}
+
+task batch_qc {
+     input {
+         Array[String] order_by
+         String BatchDir
+         String QC_pl
+         String queue
+         String jobGroup
+     }
+
+     command {
+         if [ -n "$(/bin/ls -d ${BatchDir}/TW*)" ]; then
+             /bin/chmod -R 777 ${BatchDir}/TW*
+         fi
+
+         /usr/bin/perl ${QC_pl} ${BatchDir}
+     }
+     runtime {
+         docker_image: "docker1(registry.gsc.wustl.edu/mgi-cle/myeloseqhd:v2)"
+         memory: "4 G"
          queue: queue
          job_group: jobGroup
      }

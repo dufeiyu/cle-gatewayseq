@@ -1,0 +1,17 @@
+{	
+    "Gatewayseq.DemuxSampleSheet":"",
+    "Gatewayseq.SampleSheet":"",
+    "Gatewayseq.OutputDir":"",
+    "Gatewayseq.IlluminaDir":"",
+    "Gatewayseq.CivicCachePath":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl",
+    "Gatewayseq.VariantDB":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/variantDB/gwseq.db",
+    "Gatewayseq.GWSeqRepo":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq",
+    "Gatewayseq.readfamilysize":1,
+    "Gatewayseq.CNVfilterlength":5000,
+    "Gatewayseq.RmRunDir":"true",
+    "Gatewayseq.JobGroup":"/cle/wdl/haloplex",
+    "Gatewayseq.DragenEnv":"LSF_DOCKER_DRAGEN=y",
+    "Gatewayseq.DragenDockerImage":"gtac-mgi-dragen(seqfu/oracle8-dragen-4.0.3:latest)",
+    "Gatewayseq.DragenQueue":"dragen",
+    "Gatewayseq.Queue":"gtac-mgi"
+}

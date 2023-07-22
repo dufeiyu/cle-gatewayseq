@@ -1,8 +1,16 @@
 {	
-    "Gatewayseq.JobGroup":"/cle/wdl/haloplex",
-    "Gatewayseq.DemuxSampleSheet":"PATH",
+    "Gatewayseq.DemuxSampleSheet":"",
     "Gatewayseq.SampleSheet":"PATH",
-    "Gatewayseq.OutputDir":"PATH",
-    "Gatewayseq.IlluminaDir":"PATH",
+    "Gatewayseq.OutputDir":"",
+    "Gatewayseq.IlluminaDir":"",
+    "Gatewayseq.readfamilysize":1,
+    "Gatewayseq.CNVfilterlength":5000,
+    "Gatewayseq.CivicCachePath":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/.civicpy/cache.pkl",
+    "Gatewayseq.VariantDB":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/variantDB/gwseq.db",
+    "Gatewayseq.GWSeqRepo":"/storage1/fs1/duncavagee/Active/SEQ/GatewaySeq/process/git/cle-gatewayseq",
+    "Gatewayseq.RmRunDir":"true",
+    "Gatewayseq.JobGroup":"/cle/wdl/haloplex",
+    "Gatewayseq.DragenDockerImage":"docker1(seqfu/centos7-dragen-4.0.3)",
+    "Gatewayseq.DragenQueue":"duncavagee",
     "Gatewayseq.Queue":"gtac-mgi"
 }
