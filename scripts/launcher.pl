@@ -81,7 +81,7 @@ for my $row ($sheet->rows()) {
     my ($name, $mrn, $accession) = $lib =~ /^([A-Z]{4}\-(\d+)\-([A-Z]\d+\-\d+)\-[A-Z0-9]+)\-lib/;
     my $id = ($exception and $exception =~ /RESEARCH/) ? 'NONE' : $mrn.'_'.$accession;
 
-    ($name) = $lib =~ /^(\S+)\-lib/ if $lib =~ /^H_|Research|Clinical|Positive\-Control/;
+    ($name) = $lib =~ /^(\S+)\-lib/ if $exception =~ /RESEARCH/ or $lib =~ /^H_|Research|Clinical|Positive\-Control/;
 
     unless ($id eq 'NONE') {
         unless ($mrn and $accession) {

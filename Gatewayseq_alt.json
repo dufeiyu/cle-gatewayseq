@@ -1,6 +1,6 @@
 {	
     "Gatewayseq.DemuxSampleSheet":"",
-    "Gatewayseq.SampleSheet":"",
+    "Gatewayseq.SampleSheet":"PATH",
     "Gatewayseq.OutputDir":"",
     "Gatewayseq.IlluminaDir":"",
     "Gatewayseq.RunInfoStr":"",
